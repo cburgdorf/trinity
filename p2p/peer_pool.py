@@ -36,6 +36,7 @@ from p2p.constants import (
 )
 from p2p.events import (
     PeerCandidatesRequest,
+    PeerPoolMessageEvent,
     RandomBootnodeRequest,
 )
 from p2p.exceptions import (
@@ -54,6 +55,7 @@ from p2p.peer import (
     BasePeerFactory,
     BasePeerContext,
     handshake,
+    IdentifiablePeer,
     PeerMessage,
     PeerSubscriber,
 )
@@ -63,6 +65,9 @@ from p2p.persistence import (
 )
 from p2p.p2p_proto import (
     DisconnectReason,
+)
+from p2p.protocol import (
+    Command,
 )
 from p2p.service import (
     BaseService,
@@ -334,6 +339,14 @@ class BasePeerPool(BaseService, AsyncIterable[BasePeer]):
             self.logger.debug("== End peer details == ")
             await self.sleep(self._report_interval)
 
+    # TODO: The lookup should not need looping through the peers
+    def super_shitty_peer_lookup(self, dto_peer: IdentifiablePeer) -> BasePeer:
+        for peer in self.connected_nodes.values():
+            if peer.remote.uri() == dto_peer.uri:
+                return peer
+
+        raise Exception(f"Not connected to {dto_peer.uri}")
+
 
 class ConnectedPeersIterator(AsyncIterator[BasePeer]):
 
@@ -351,3 +364,33 @@ class ConnectedPeersIterator(AsyncIterator[BasePeer]):
                     return peer
             except StopIteration:
                 raise StopAsyncIteration
+
+
+class PeerPoolMessageRelayer(BaseService, PeerSubscriber):
+    """
+    Relay every message from the PeerPool on the EventBus
+    """
+
+    msg_queue_maxsize: int = 2000
+
+    subscription_msg_types = frozenset({Command})
+
+    def __init__(self,
+                 peer_pool: BasePeerPool,
+                 event_bus: Endpoint,
+                 token: CancelToken = None) -> None:
+        super().__init__(token)
+        self._event_bus = event_bus
+        self._peer_pool = peer_pool
+
+    async def _run(self) -> None:
+        self.logger.info("Running PeerPool relayer")
+
+        with self.subscribe(self._peer_pool):
+            while self.is_operational:
+                peer, cmd, msg = await self.wait(
+                    self.msg_queue.get(),
+                    token=self.cancel_token
+                )
+
+                self._event_bus.broadcast(PeerPoolMessageEvent(peer.to_dto(), cmd, msg))

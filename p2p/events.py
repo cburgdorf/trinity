@@ -7,6 +7,13 @@ from lahja import (
     BaseEvent,
     BaseRequestResponseEvent,
 )
+from p2p.peer import (
+    IdentifiablePeer,
+)
+from p2p.protocol import (
+    Command,
+    PayloadType,
+)
 
 
 class BaseDiscoveryServiceResponse(BaseEvent):
@@ -56,3 +63,11 @@ class ConnectToNodeCommand(BaseEvent):
 
     def __init__(self, node: str) -> None:
         self.node = node
+
+
+class PeerPoolMessageEvent(BaseEvent):
+
+    def __init__(self, peer: IdentifiablePeer, cmd: Command, msg: PayloadType) -> None:
+        self.peer = peer
+        self.cmd = cmd
+        self.msg = msg

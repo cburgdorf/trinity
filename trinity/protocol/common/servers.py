@@ -15,9 +15,14 @@ from eth_typing import (
     Hash32,
 )
 from eth.rlp.headers import BlockHeader
+from lahja import (
+    BroadcastConfig,
+    Endpoint,
+)
 from p2p import protocol
 from p2p.cancellable import CancellableMixin
-from p2p.peer import BasePeer, PeerSubscriber
+from p2p.events import PeerPoolMessageEvent
+from p2p.peer import BasePeer, IdentifiablePeer, PeerSubscriber
 from p2p.protocol import (
     Command,
     _DecodedMsgType,
@@ -76,6 +81,47 @@ class BaseRequestServer(BaseService, PeerSubscriber):
         """
         Identify the command, and react appropriately.
         """
+        pass
+
+
+class BaseIsolatedRequestServer(BaseService):
+    """
+    Like ``BaseRequestServer`` but supports running in an isolated plugin within its own process.
+    """
+
+    def __init__(
+            self,
+            event_bus: Endpoint,
+            broadcast_config: BroadcastConfig,
+            token: CancelToken = None) -> None:
+        super().__init__(token)
+        self.event_bus = event_bus
+        self.broadcast_config = broadcast_config
+
+    async def _run(self) -> None:
+        while self.is_operational:
+            async for ev in self.wait_iter(self.event_bus.stream(PeerPoolMessageEvent)):
+                self.run_task(self._quiet_handle_msg(ev.peer, ev.cmd, ev.msg))
+
+    async def _quiet_handle_msg(
+            self,
+            peer: IdentifiablePeer,
+            cmd: protocol.Command,
+            msg: protocol._DecodedMsgType) -> None:
+        try:
+            await self._handle_msg(peer, cmd, msg)
+        except OperationCancelled:
+            # Silently swallow OperationCancelled exceptions because otherwise they'll be caught
+            # by the except below and treated as unexpected.
+            pass
+        except Exception:
+            self.logger.exception("Unexpected error when processing msg from %s", peer)
+
+    @abstractmethod
+    async def _handle_msg(self,
+                          dto_peer: IdentifiablePeer,
+                          cmd: Command,
+                          msg: protocol._DecodedMsgType) -> None:
         pass
 
 

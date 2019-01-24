@@ -4,6 +4,7 @@ from typing import (
     TYPE_CHECKING,
     Union,
 )
+import typing_extensions
 
 from eth_typing import (
     BlockNumber,
@@ -12,6 +13,13 @@ from eth_typing import (
 
 from eth.rlp.headers import BlockHeader
 
+from lahja import (
+    BroadcastConfig,
+    Endpoint,
+)
+from p2p.peer import (
+    IdentifiablePeer,
+)
 from p2p.protocol import (
     Protocol,
 )
@@ -39,10 +47,45 @@ from .commands import (
     ContractCodeRequest,
     ContractCodes,
 )
+from .events import (
+    SendBlockHeadersEvent,
+)
 from . import constants
 
 if TYPE_CHECKING:
     from .peer import LESPeer  # noqa: F401
+
+
+class LESProtocolLike(typing_extensions.Protocol):
+
+    def send_handshake(self, chain_info: ChainInfo) -> None:
+        pass
+
+    def send_get_block_bodies(self, block_hashes: List[bytes], request_id: int=None) -> int:
+        pass
+
+    def send_get_block_headers(
+            self,
+            block_number_or_hash: Union[BlockNumber, Hash32],
+            max_headers: int,
+            skip: int,
+            reverse: bool,
+            request_id: int=None) -> int:
+        pass
+
+    def send_block_headers(
+            self, headers: Tuple[BlockHeader, ...], buffer_value: int, request_id: int=None) -> int:
+        pass
+
+    def send_get_receipts(self, block_hash: bytes, request_id: int=None) -> int:
+        pass
+
+    def send_get_proof(self, block_hash: bytes, account_key: bytes, key: bytes, from_level: int,
+                       request_id: int=None) -> int:
+        pass
+
+    def send_get_contract_code(self, block_hash: bytes, key: bytes, request_id: int=None) -> int:
+        pass
 
 
 class LESProtocol(Protocol):
@@ -207,3 +250,52 @@ class LESProtocolV2(LESProtocol):
         self.send(header, body)
 
         return request_id
+
+
+class RemoteLESProtocol:
+
+    def __init__(self,
+                 dto_peer: IdentifiablePeer,
+                 event_bus: Endpoint,
+                 broadcast_config: BroadcastConfig):
+        self._dto_peer = dto_peer
+        self._event_bus = event_bus
+        self._broadcast_config = broadcast_config
+
+    def send_handshake(self, chain_info: ChainInfo) -> None:
+        raise NotImplementedError("API not implemented")
+
+    def send_get_block_bodies(self, block_hashes: List[bytes], request_id: int=None) -> int:
+        raise NotImplementedError("API not implemented")
+
+    def send_get_block_headers(
+            self,
+            block_number_or_hash: Union[BlockNumber, Hash32],
+            max_headers: int,
+            skip: int,
+            reverse: bool,
+            request_id: int=None) -> int:
+        raise NotImplementedError("API not implemented")
+
+    def send_block_headers(self,
+                           headers: Tuple[BlockHeader, ...],
+                           buffer_value: int,
+                           request_id: int=None) -> int:
+
+        req_id = request_id if not None else gen_request_id()
+
+        self._event_bus.broadcast(
+            SendBlockHeadersEvent(self._dto_peer, headers, buffer_value, req_id),
+            self._broadcast_config,
+        )
+        return req_id
+
+    def send_get_receipts(self, block_hash: bytes, request_id: int=None) -> int:
+        raise NotImplementedError("API not implemented")
+
+    def send_get_proof(self, block_hash: bytes, account_key: bytes, key: bytes, from_level: int,
+                       request_id: int=None) -> int:
+        raise NotImplementedError("API not implemented")
+
+    def send_get_contract_code(self, block_hash: bytes, key: bytes, request_id: int=None) -> int:
+        raise NotImplementedError("API not implemented")

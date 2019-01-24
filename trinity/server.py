@@ -50,6 +50,7 @@ from p2p.p2p_proto import (
 from p2p.peer import BasePeer, PeerConnection
 from p2p.persistence import BasePeerInfo
 from p2p.peer_pool_event_bus_request_handler import BasePeerPoolEventBusRequestHandler
+from p2p.peer_pool import PeerPoolMessageRelayer
 from p2p.service import BaseService
 
 from trinity.chains.base import BaseAsyncChain
@@ -59,11 +60,9 @@ from trinity.db.eth1.chain import BaseAsyncChainDB
 from trinity.db.eth1.header import BaseAsyncHeaderDB
 from trinity.protocol.common.context import ChainContext
 from trinity.protocol.common.peer import BaseChainPeerPool
-from trinity.protocol.common.servers import BaseRequestServer
 from trinity.protocol.eth.peer import ETHPeerPool
-from trinity.protocol.eth.servers import ETHRequestServer
 from trinity.protocol.les.peer import LESPeerPool
-from trinity.protocol.les.servers import LightRequestServer
+
 
 DIAL_IN_OUT_RATIO = 0.75
 
@@ -116,7 +115,11 @@ class BaseServer(BaseService, Generic[TPeerPool]):
         self.upnp_service = UPnPService(port, token=self.cancel_token)
         self.peer_pool = self._make_peer_pool()
         self._external_peer_pool_api = self._make_peer_pool_request_handler(self.peer_pool)
-        self.request_server = self._make_request_server()
+        self._peer_pool_relayer = PeerPoolMessageRelayer(
+            self.peer_pool,
+            self.event_bus,
+            self.cancel_token
+        )
 
         if not bootstrap_nodes:
             self.logger.warning("Running with no bootstrap nodes")
@@ -132,10 +135,6 @@ class BaseServer(BaseService, Generic[TPeerPool]):
             peer_pool,
             self.cancel_token
         )
-
-    @abstractmethod
-    def _make_request_server(self) -> BaseRequestServer:
-        pass
 
     async def _start_tcp_listener(self) -> None:
         # TODO: Support IPv6 addresses as well.
@@ -169,7 +168,7 @@ class BaseServer(BaseService, Generic[TPeerPool]):
 
         self.run_daemon(self.peer_pool)
         self.run_daemon(self._external_peer_pool_api)
-        self.run_daemon(self.request_server)
+        self.run_daemon(self._peer_pool_relayer)
 
         # UPNP service is still experimental and not essential, so we don't use run_daemon() for
         # it as that means if it crashes we'd be terminated as well.
@@ -304,13 +303,6 @@ class FullServer(BaseServer[ETHPeerPool]):
             event_bus=self.event_bus
         )
 
-    def _make_request_server(self) -> ETHRequestServer:
-        return ETHRequestServer(
-            self.chaindb,
-            self.peer_pool,
-            token=self.cancel_token,
-        )
-
 
 class LightServer(BaseServer[LESPeerPool]):
     def _make_peer_pool(self) -> LESPeerPool:
@@ -325,13 +317,6 @@ class LightServer(BaseServer[LESPeerPool]):
             context=context,
             token=self.cancel_token,
             event_bus=self.event_bus
-        )
-
-    def _make_request_server(self) -> LightRequestServer:
-        return LightRequestServer(
-            self.headerdb,
-            self.peer_pool,
-            token=self.cancel_token,
         )
 
 

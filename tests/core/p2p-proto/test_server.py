@@ -11,7 +11,9 @@ from eth.db.atomic import AtomicDB
 from eth.db.chain import ChainDB
 
 from p2p.auth import HandshakeInitiator, _handshake
-from p2p.events import ConnectToNodeCommand
+from p2p.events import (
+    ConnectToNodeCommand,
+)
 from p2p.kademlia import (
     Node,
     Address,
@@ -58,13 +60,11 @@ class ParagonServer(BaseServer):
             privkey=self.privkey,
             context=ParagonContext(),
             token=self.cancel_token,
+            event_bus=self.event_bus,
         )
 
-    def _make_request_server(self):
-        return
 
-
-def get_server(privkey, address):
+def get_server(privkey, address, event_bus):
     base_db = AtomicDB()
     headerdb = FakeAsyncHeaderDB(base_db)
     chaindb = ChainDB(base_db)
@@ -78,13 +78,14 @@ def get_server(privkey, address):
         headerdb=headerdb,
         base_db=base_db,
         network_id=NETWORK_ID,
+        event_bus=event_bus,
     )
     return server
 
 
 @pytest.fixture
-async def server():
-    server = get_server(RECEIVER_PRIVKEY, SERVER_ADDRESS)
+async def server(event_bus):
+    server = get_server(RECEIVER_PRIVKEY, SERVER_ADDRESS, event_bus)
     await asyncio.wait_for(server._start_tcp_listener(), timeout=1)
     try:
         yield server
@@ -175,6 +176,7 @@ async def test_peer_pool_answers_connect_commands(event_loop, event_bus, server)
     )
     asyncio.ensure_future(initiator_peer_pool.run(), loop=event_loop)
     await initiator_peer_pool.events.started.wait()
+    await next(iter(initiator_peer_pool._child_services)).events.started.wait()
 
     assert len(server.peer_pool.connected_nodes) == 0
 
@@ -186,4 +188,5 @@ async def test_peer_pool_answers_connect_commands(event_loop, event_bus, server)
     await asyncio.sleep(0.5)
 
     assert len(server.peer_pool.connected_nodes) == 1
+
     await initiator_peer_pool.cancel()

@@ -7,25 +7,41 @@ from typing import (
 )
 
 from cancel_token import CancelToken
+from lahja import (
+    BroadcastConfig,
+    Endpoint,
+)
 
-from p2p.peer import BasePeer
+from p2p.peer import (
+    BasePeer,
+    IdentifiablePeer,
+)
 from p2p.protocol import (
     Command,
     _DecodedMsgType,
 )
 
 from trinity.db.eth1.header import BaseAsyncHeaderDB
-from trinity.protocol.common.servers import BaseRequestServer, BasePeerRequestHandler
+from trinity.protocol.common.servers import (
+    BaseRequestServer,
+    BaseIsolatedRequestServer,
+    BasePeerRequestHandler,
+)
 from trinity.protocol.les import commands
-from trinity.protocol.les.peer import LESPeer, LESPeerPool
+from trinity.protocol.les.peer import (
+    LESPeer,
+    LESPeerLike,
+    LESPeerPool,
+    to_remote_peer,
+)
 
 from trinity.protocol.les.requests import HeaderRequest as LightHeaderRequest
 
 
 class LESPeerRequestHandler(BasePeerRequestHandler):
-    async def handle_get_block_headers(self, peer: LESPeer, msg: Dict[str, Any]) -> None:
-        if not peer.is_operational:
-            return
+    async def handle_get_block_headers(self, peer: LESPeerLike, msg: Dict[str, Any]) -> None:
+        # if not peer.is_operational:
+        #     return
         self.logger.debug("Peer %s made header request: %s", peer, msg)
         request = LightHeaderRequest(
             msg['query'].block_number_or_hash,
@@ -64,3 +80,37 @@ class LightRequestServer(BaseRequestServer):
             await self._handler.handle_get_block_headers(peer, block_request_kwargs)
         else:
             self.logger.debug("%s msg from %s not implemented", cmd, peer)
+
+
+class LightIsolatedRequestServer(BaseIsolatedRequestServer):
+    """
+    Like ``LightRequestServer`` but supports running in an isolated plugin within its own process.
+    """
+
+    _handled_commands = (
+        commands.GetBlockHeaders,
+    )
+
+    def __init__(
+            self,
+            event_bus: Endpoint,
+            broadcast_config: BroadcastConfig,
+            db: BaseAsyncHeaderDB,
+            token: CancelToken = None) -> None:
+        super().__init__(event_bus, broadcast_config, token)
+        self._handler = LESPeerRequestHandler(db, self.cancel_token)
+
+    async def _handle_msg(self,
+                          dto_peer: IdentifiablePeer,
+                          cmd: Command,
+                          msg: _DecodedMsgType) -> None:
+
+        if type(cmd) not in self._handled_commands:
+            return
+
+        self.logger.debug("Peer %s requested %s", dto_peer.uri, cmd)
+        peer = to_remote_peer(dto_peer, self.event_bus, self.broadcast_config)
+        if isinstance(cmd, commands.GetBlockHeaders):
+            await self._handler.handle_get_block_headers(peer, cast(Dict[str, Any], msg))
+        else:
+            self.logger.debug("%s msg not handled yet, need to be implemented", cmd)
