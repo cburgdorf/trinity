@@ -3,6 +3,9 @@ from .commands import (  # noqa: F401
     GetSum,
     Sum,
 )
+from .events import (  # noqa: F401
+    GetSumRequest,
+)
 from .proto import (  # noqa: F401
     ParagonProtocol,
 )
@@ -13,6 +16,7 @@ from .peer import (  # noqa: F401
     ParagonPeerFactory,
     ParagonPeerPool,
     ParagonPeerPoolEventServer,
+    ParagonProxyPeer,
 )
 from .helpers import (  # noqa: F401
     get_directly_connected_streams,

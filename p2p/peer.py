@@ -273,6 +273,12 @@ class BasePeer(BaseService):
     def get_boot_manager(self) -> BasePeerBootManager:
         return self.boot_manager_class(self)
 
+    def to_dto(self) -> IdentifiablePeer:
+        """
+        Convert into a Data Transfer Object (DTO) that can be send across process boundaries
+        """
+        return BaseDTOPeer(self.remote.uri())
+
     @abstractmethod
     async def send_sub_proto_handshake(self) -> None:
         pass
@@ -615,6 +621,7 @@ class BasePeer(BaseService):
             self.logger.error(
                 "Attempted to send msg with cmd id %d to disconnected peer %s", cmd_id, self)
             return
+
         self.writer.write(self.encrypt(header, body))
 
     def _disconnect(self, reason: DisconnectReason) -> None:

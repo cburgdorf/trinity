@@ -4,10 +4,15 @@ from typing import (
 from p2p.exceptions import (
     PeerConnectionLost,
 )
+from lahja import (
+    BroadcastConfig,
+    Endpoint,
+)
 from p2p.peer import (
     BasePeer,
     BasePeerContext,
     BasePeerFactory,
+    IdentifiablePeer,
 )
 from p2p.peer_pool import (
     BasePeerPool,
@@ -22,7 +27,28 @@ from trinity.protocol.common.peer_pool_event_bus import (
 )
 
 from .events import GetSumRequest
-from .proto import ParagonProtocol
+from .proto import (
+    ParagonProtocol,
+    ProxyParagonProtocol,
+)
+
+
+class ParagonProxyPeer:
+    """
+    A ``ParagonPeer`` that can be used from any process as a drop-in replacement for the actual
+    peer that sits in the peer pool. Any action performed on the ``ParagonProxyPeer`` is delegated
+    to the actual peer in the pool.
+    """
+
+    def __init__(self, sub_proto: ProxyParagonProtocol):
+        self.sub_proto = sub_proto
+
+    @classmethod
+    def from_dto_peer(cls,
+                      dto_peer: IdentifiablePeer,
+                      event_bus: Endpoint,
+                      broadcast_config: BroadcastConfig) -> 'ParagonProxyPeer':
+            return cls(ProxyParagonProtocol(dto_peer, event_bus, broadcast_config))
 
 
 class ParagonPeer(BasePeer):
@@ -51,7 +77,12 @@ class ParagonPeerFactory(BasePeerFactory):
     context: ParagonContext
 
 
-class ParagonPeerPoolEventServer(PeerPoolEventServer[ParagonPeer]):
+class ParagonPeerPool(BasePeerPool):
+    peer_factory_class = ParagonPeerFactory
+    context: ParagonContext
+
+
+class ParagonPeerPoolEventServer(PeerPoolEventServer[ParagonPeer, ParagonPeerPool]):
     """
     A request handler to handle paragon specific requests to the peer pool.
     """
@@ -69,11 +100,6 @@ class ParagonPeerPoolEventServer(PeerPoolEventServer[ParagonPeer]):
                 pass
             else:
                 peer.sub_proto.send_get_sum(req.a, req.b)
-
-
-class ParagonPeerPool(BasePeerPool):
-    peer_factory_class = ParagonPeerFactory
-    context: ParagonContext
 
 
 class ParagonMockPeerPoolWithConnectedPeers(ParagonPeerPool):

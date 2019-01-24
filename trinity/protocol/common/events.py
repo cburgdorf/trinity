@@ -1,5 +1,8 @@
 from typing import (
+    Generic,
+    Tuple,
     Type,
+    TypeVar,
 )
 
 from lahja import (
@@ -12,6 +15,10 @@ from p2p.peer import (
 )
 from p2p.p2p_proto import (
     DisconnectReason,
+)
+from p2p.protocol import (
+    Command,
+    PayloadType,
 )
 
 
@@ -43,6 +50,51 @@ class PeerCountRequest(BaseRequestResponseEvent[PeerCountResponse]):
         return PeerCountResponse
 
 
+TPeer = TypeVar('TPeer')
+
+
+class BasePeerPoolMessageEvent(BaseEvent, Generic[TPeer]):
+    """
+    Event broadcasted when a peer sends a command.
+    """
+
+    def __init__(self, peer: TPeer, cmd: Command, msg: PayloadType) -> None:
+        self.peer = peer
+        self.cmd = cmd
+        self.msg = msg
+
+
+# It appears BasePeerPoolMessageEvent[IdentifiablePeer] can't be pickled
+# so we have to use a non-generic version here.
+class PeerPoolMessageEvent(BaseEvent):
+    """
+    Event broadcasted when a peer sends a command.
+    """
+
+    def __init__(self, peer: IdentifiablePeer, cmd: Command, msg: PayloadType) -> None:
+        self.peer = peer
+        self.cmd = cmd
+        self.msg = msg
+
+
+class PeerJoinedEvent(BaseEvent):
+    """
+    Event broadcasted when a new peer joined the pool.
+    """
+
+    def __init__(self, peer: IdentifiablePeer) -> None:
+        self.peer = peer
+
+
+class PeerLeftEvent(BaseEvent):
+    """
+    Event broadcasted when a peer left the pool.
+    """
+
+    def __init__(self, peer: IdentifiablePeer) -> None:
+        self.peer = peer
+
+
 class DisconnectPeerEvent(BaseEvent):
     """
     Event broadcasted when we want to disconnect from a peer
@@ -51,3 +103,38 @@ class DisconnectPeerEvent(BaseEvent):
     def __init__(self, peer: IdentifiablePeer, reason: DisconnectReason) -> None:
         self.peer = peer
         self.reason = reason
+
+
+class GetHighestTDPeerResponse(BaseEvent):
+
+    def __init__(self,
+                 dto_peer: IdentifiablePeer) -> None:
+        self.dto_peer = dto_peer
+
+
+class GetHighestTDPeerRequest(BaseRequestResponseEvent[GetHighestTDPeerResponse]):
+
+    def __init__(self,
+                 timeout: float) -> None:
+        self.timeout = timeout
+
+    @staticmethod
+    def expected_response_type() -> Type[GetHighestTDPeerResponse]:
+        return GetHighestTDPeerResponse
+
+
+class GetConnectedPeersResponse(BaseEvent):
+
+    def __init__(self,
+                 dto_peers: Tuple[IdentifiablePeer, ...]) -> None:
+        self.dto_peers = dto_peers
+
+
+class GetConnectedPeersRequest(BaseRequestResponseEvent[GetConnectedPeersResponse]):
+
+    def __init__(self, min_td: int = 0) -> None:
+        self.min_td = min_td
+
+    @staticmethod
+    def expected_response_type() -> Type[GetConnectedPeersResponse]:
+        return GetConnectedPeersResponse

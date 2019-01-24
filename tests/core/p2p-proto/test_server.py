@@ -65,9 +65,6 @@ class ParagonServer(BaseServer):
             event_bus=self.event_bus,
         )
 
-    def _make_request_server(self):
-        return
-
 
 def get_server(privkey, address, event_bus):
     base_db = AtomicDB()
@@ -197,4 +194,5 @@ async def test_peer_pool_answers_connect_commands(event_loop, event_bus, server)
     await asyncio.sleep(0.5)
 
     assert len(server.peer_pool.connected_nodes) == 1
+
     await initiator_peer_pool.cancel()

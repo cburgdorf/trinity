@@ -1,3 +1,6 @@
+from abc import (
+    abstractmethod,
+)
 from typing import (
     Any,
     cast,
@@ -5,6 +8,7 @@ from typing import (
     List,
     Union,
 )
+import typing_extensions
 
 from eth_typing import (
     BlockNumber,
@@ -12,9 +16,16 @@ from eth_typing import (
 )
 
 from eth_utils import encode_hex
-
+from lahja import (
+    BroadcastConfig,
+    Endpoint
+)
 from p2p.exceptions import (
     HandshakeFailure,
+    PeerConnectionLost,
+)
+from p2p.peer import (
+    IdentifiablePeer,
 )
 from p2p.p2p_proto import DisconnectReason
 from p2p.protocol import (
@@ -22,10 +33,19 @@ from p2p.protocol import (
     _DecodedMsgType,
 )
 
+from trinity.endpoint import (
+    TrinityEventBusEndpoint,
+)
 from trinity.protocol.common.peer import (
+    BaseChainDTOPeer,
     BaseChainPeer,
     BaseChainPeerFactory,
     BaseChainPeerPool,
+    BaseChainProxyPeer,
+)
+from trinity.protocol.common.peer_pool_event_bus import (
+    PeerPoolEventServer,
+    BaseProxyPeerPool,
 )
 
 from .commands import (
@@ -36,11 +56,29 @@ from .commands import (
 from .constants import (
     MAX_HEADERS_FETCH,
 )
+from .events import (
+    SendBlockHeadersEvent,
+)
 from .proto import (
     LESProtocol,
+    LESProtocolLike,
     LESProtocolV2,
+    ProxyLESProtocol,
 )
 from .handlers import LESExchangeHandler
+
+
+class LESPeerLike(typing_extensions.Protocol):
+
+    @property
+    @abstractmethod
+    def sub_proto(self) -> LESProtocolLike:
+        pass
+
+    @property
+    @abstractmethod
+    def is_operational(self) -> bool:
+        pass
 
 
 class LESPeer(BaseChainPeer):
@@ -103,9 +141,70 @@ class LESPeer(BaseChainPeer):
         self.head_number = msg['headNum']
 
 
+class LESProxyPeer(BaseChainProxyPeer):
+    """
+    A ``LESPeer`` that can be used from any process as a drop-in replacement for the actual
+    peer that sits in the peer pool. Any action performed on the ``LESProxyPeer`` is delegated
+    to the actual peer in the pool.
+    """
+
+    def __init__(self, sub_proto: ProxyLESProtocol):
+        self.sub_proto = sub_proto
+
+    @property
+    def is_operational(self) -> bool:
+        # We implement this API because parts of our code base works with actual and proxy peers
+        # for the time being and expect this API to exist.
+        # We return `True` here because it would be a waste to do this extra round trip, plus it
+        # would only be a race condition at best.
+        # When working with a proxy peer one *must* do the `is_operational` check in the request
+        # handler that runs in the peer pool process.
+        return True
+
+    @classmethod
+    def from_dto_peer(cls,
+                      dto_peer: BaseChainDTOPeer,
+                      event_bus: Endpoint,
+                      broadcast_config: BroadcastConfig) -> 'LESProxyPeer':
+        return cls(ProxyLESProtocol(dto_peer, event_bus, broadcast_config))
+
+
 class LESPeerFactory(BaseChainPeerFactory):
     peer_class = LESPeer
 
 
+class LESPeerPoolEventServer(PeerPoolEventServer[LESPeer, BaseChainPeerPool]):
+    """
+    A request handler to handle LES specific requests to the peer pool.
+    """
+
+    async def _run(self) -> None:
+        self.logger.info("Running LESPeerPoolEventBusRequestHandler")
+        self.run_daemon_task(self.handle_send_blockheader_events())
+        await super()._run()
+
+    async def handle_send_blockheader_events(self) -> None:
+        async for ev in self.wait_iter(self.event_bus.stream(SendBlockHeadersEvent)):
+            try:
+                peer = self.get_peer(ev.peer)
+            except PeerConnectionLost:
+                pass
+            else:
+                peer.sub_proto.send_block_headers(ev.headers, ev.buffer_value, ev.request_id)
+
+
 class LESPeerPool(BaseChainPeerPool):
     peer_factory_class = LESPeerFactory
+
+
+class LESProxyPeerPool(BaseProxyPeerPool[LESProxyPeer]):
+
+    def to_proxy_peer(self,
+                      peer: IdentifiablePeer,
+                      event_bus: TrinityEventBusEndpoint,
+                      broadcast_config: BroadcastConfig) -> LESProxyPeer:
+        return LESProxyPeer.from_dto_peer(
+            cast(BaseChainDTOPeer, peer),
+            self.event_bus,
+            self.broadcast_config
+        )

@@ -11,6 +11,8 @@ Unreleased (latest source)
 - `#347 <https://github.com/ethereum/trinity/pull/347>`_: Bugfix: Don't crash during sync pruning when switching peers
 - `#389 <https://github.com/ethereum/trinity/pull/389>`_: Bugfix: Always return contiguous headers from header syncer
 - `#389 <https://github.com/ethereum/trinity/pull/389>`_: Performance: When switching sync to a new lead peer, don't backtrack to importing old headers
+- `#291 <https://github.com/ethereum/trinity/pull/291>`_: Performance: Move the Request server into its own isolated plugin process
+- `#291 <https://github.com/ethereum/trinity/pull/291>`_: Extensibility: Relay all peer pool message on the event bus
 
 0.1.0-alpha.23
 --------------------------
