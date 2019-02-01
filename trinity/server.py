@@ -49,6 +49,7 @@ from p2p.p2p_proto import (
 )
 from p2p.peer import BasePeer, PeerConnection
 from p2p.persistence import BasePeerInfo
+from p2p.peer_pool_event_bus_request_handler import BasePeerPoolEventBusRequestHandler
 from p2p.service import BaseService
 
 from trinity.chains.base import BaseAsyncChain
@@ -114,6 +115,7 @@ class BaseServer(BaseService, Generic[TPeerPool]):
         # child services
         self.upnp_service = UPnPService(port, token=self.cancel_token)
         self.peer_pool = self._make_peer_pool()
+        self._external_peer_pool_api = self._make_peer_pool_request_handler(self.peer_pool)
         self.request_server = self._make_request_server()
 
         if not bootstrap_nodes:
@@ -122,6 +124,14 @@ class BaseServer(BaseService, Generic[TPeerPool]):
     @abstractmethod
     def _make_peer_pool(self) -> TPeerPool:
         pass
+
+    def _make_peer_pool_request_handler(self,
+                                        peer_pool: TPeerPool) -> BasePeerPoolEventBusRequestHandler:
+        return BasePeerPoolEventBusRequestHandler(
+            self.event_bus,
+            peer_pool,
+            self.cancel_token
+        )
 
     @abstractmethod
     def _make_request_server(self) -> BaseRequestServer:
@@ -158,6 +168,7 @@ class BaseServer(BaseService, Generic[TPeerPool]):
         self.logger.info('peers: max_peers=%s', self.max_peers)
 
         self.run_daemon(self.peer_pool)
+        self.run_daemon(self._external_peer_pool_api)
         self.run_daemon(self.request_server)
 
         # UPNP service is still experimental and not essential, so we don't use run_daemon() for
