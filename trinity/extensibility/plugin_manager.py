@@ -21,7 +21,6 @@ from typing import (
 
 from lahja import (
     Endpoint,
-    EventBus,
 )
 
 from trinity.config import (
@@ -74,8 +73,7 @@ class BaseManagerProcessScope(ABC):
 
 class MainAndIsolatedProcessScope(BaseManagerProcessScope):
 
-    def __init__(self, event_bus: EventBus, main_proc_endpoint: Endpoint) -> None:
-        self.event_bus = event_bus
+    def __init__(self, main_proc_endpoint: Endpoint) -> None:
         self.endpoint = main_proc_endpoint
 
     def is_responsible_for_plugin(self, plugin: BasePlugin) -> bool:
@@ -97,9 +95,12 @@ class MainAndIsolatedProcessScope(BaseManagerProcessScope):
         uses to enable application wide event-driven communication even across process boundaries.
         """
         if isinstance(plugin, BaseIsolatedPlugin):
-            # Isolated plugins get an entirely new endpoint to be passed into that new process
+            # Isolated plugins use their own Endpoint that lives in the new process. It is only
+            # created here for API symmetry. Endpoints are pickable *before* they are connected,
+            # which means, this Endpoint will be pickled and transferred into the new process
+            # together with the rest of the `PluginContext`.
             plugin.set_context(PluginContext(
-                self.event_bus.create_endpoint(plugin.name),
+                Endpoint(),
                 boot_info,
             ))
 
@@ -202,7 +203,7 @@ class PluginManager:
                 plugin,
                 TrinityBootInfo(args, trinity_config, boot_kwargs)
             )
-            plugin.ready()
+            plugin.ready(self.event_bus_endpoint)
 
     def shutdown_blocking(self) -> None:
         """
