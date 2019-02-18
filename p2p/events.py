@@ -65,6 +65,19 @@ class ConnectToNodeCommand(BaseEvent):
         self.node = node
 
 
+class ConnectedPeersResponse(BaseEvent):
+
+    def __init__(self, peers: Tuple[IdentifiablePeer, ...]) -> None:
+        self.peers = peers
+
+
+class ConnectedPeersRequest(BaseRequestResponseEvent[ConnectedPeersResponse]):
+
+    @staticmethod
+    def expected_response_type() -> Type[ConnectedPeersResponse]:
+        return ConnectedPeersResponse
+
+
 class PeerPoolMessageEvent(BaseEvent):
 
     def __init__(self, peer: IdentifiablePeer, cmd: Command, msg: PayloadType) -> None:

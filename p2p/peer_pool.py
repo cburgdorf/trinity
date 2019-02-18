@@ -35,6 +35,7 @@ from p2p.constants import (
     REQUEST_PEER_CANDIDATE_TIMEOUT,
 )
 from p2p.events import (
+    ConnectedPeersRequest,
     PeerCandidatesRequest,
     PeerPoolMessageEvent,
     RandomBootnodeRequest,
@@ -394,3 +395,26 @@ class PeerPoolMessageRelayer(BaseService, PeerSubscriber):
                 )
 
                 self._event_bus.broadcast(PeerPoolMessageEvent(peer.to_dto(), cmd, msg))
+
+
+TPeerDTO = TypeVar('TPeerDTO')
+
+
+class RemotePeerPoolAPI(Generic[TPeerDTO]):
+    """
+    Syntactic sugar on top of raw eventbus based PeerPool interactions.
+    """
+
+    def __init__(self,
+                 event_bus: Endpoint,
+                 broadcast_config: BroadcastConfig) -> None:
+        self._event_bus = event_bus
+        self._broadcast_config = broadcast_config
+
+    async def get_connected_peers(self) -> Tuple[TPeerDTO, ...]:
+        response = await self._event_bus.request(ConnectedPeersRequest(), self._broadcast_config)
+        return cast(Tuple[TPeerDTO, ...], response.peers)
+
+    async def get_peer_count(self) -> int:
+        response = await self._event_bus.request(PeerCountRequest(), self._broadcast_config)
+        return response.peer_count

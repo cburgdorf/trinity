@@ -12,6 +12,7 @@ from eth.db.chain import ChainDB
 
 from p2p.auth import HandshakeInitiator, _handshake
 from p2p.events import (
+    ConnectedPeersRequest,
     ConnectToNodeCommand,
 )
 from p2p.kademlia import (
@@ -189,4 +190,54 @@ async def test_peer_pool_answers_connect_commands(event_loop, event_bus, server)
 
     assert len(server.peer_pool.connected_nodes) == 1
 
+    response = await event_bus.request(ConnectedPeersRequest())
+    assert len(response.peers) == 1
+
+    await initiator_peer_pool.cancel()
+
+
+@pytest.mark.asyncio
+async def test_can_remotely_control_peers(event_loop, event_bus, server):
+
+    received_events = []
+    event_bus.subscribe(PeerPoolMessageEvent, lambda ev: received_events.append(ev))
+
+    # This is the PeerPool which will accept our message and try to connect to {server}
+    initiator_peer_pool = ParagonPeerPool(
+        privkey=INITIATOR_PRIVKEY,
+        context=ParagonContext(),
+        event_bus=event_bus,
+    )
+    asyncio.ensure_future(initiator_peer_pool.run(), loop=event_loop)
+
+    relayer = PeerPoolMessageRelayer(server.peer_pool, event_bus)
+
+    asyncio.ensure_future(relayer.run(), loop=event_loop)
+    await relayer.events.started.wait()
+    await initiator_peer_pool.events.started.wait()
+    await next(iter(initiator_peer_pool._child_services)).events.started.wait()
+
+    assert len(server.peer_pool.connected_nodes) == 0
+
+    event_bus.broadcast(
+        ConnectToNodeCommand(RECEIVER_REMOTE.uri()),
+        TO_NETWORKING_BROADCAST_CONFIG
+    )
+
+    await asyncio.sleep(0.1)
+
+    assert len(server.peer_pool.connected_nodes) == 1
+
+    response = await event_bus.request(ConnectedPeersRequest())
+    assert len(response.peers) == 1
+
+    dto_peer = response.peers[0]
+
+    # Use the DTO Peer to delegate a call to the real peer
+    remote_peer = to_remote_peer(dto_peer, event_bus, TO_NETWORKING_BROADCAST_CONFIG)
+    remote_peer.sub_proto.send_get_sum(10, 20)
+
+    await asyncio.sleep(0.05)
+
+    assert len(received_events) == 1
     await initiator_peer_pool.cancel()

@@ -9,6 +9,8 @@ from lahja import (
 )
 
 from p2p.events import (
+    ConnectedPeersRequest,
+    ConnectedPeersResponse,
     ConnectToNodeCommand,
     PeerCountRequest,
     PeerCountResponse,
@@ -52,10 +54,16 @@ class BasePeerPoolEventBusRequestHandler(BaseService):
                 req.broadcast_config()
             )
 
+    async def handle_connected_peers_requests(self) -> None:
+        async for req in self.wait_iter(self._event_bus.stream(ConnectedPeersRequest)):
+            dtos = tuple(peer.to_dto() for peer in self._peer_pool.connected_nodes.values())
+            self._event_bus.broadcast(ConnectedPeersResponse(dtos), req.broadcast_config())
+
     async def _run(self) -> None:
         self.logger.info("Running BasePeerPoolEventBusRequestHandler")
 
         self.run_daemon_task(self.handle_peer_count_requests())
+        self.run_daemon_task(self.handle_connected_peers_requests())
         self.run_daemon_task(self.accept_connect_commands())
 
         await self.cancel_token.wait()
