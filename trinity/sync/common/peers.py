@@ -13,12 +13,13 @@ from eth_utils import (
 
 from p2p.protocol import Command
 
-from trinity.protocol.common.peer import BaseChainPeer
+# from trinity.protocol.common.peer import BaseChainProxyPeer
+from trinity.protocol.eth.peer import ETHProxyPeer
 from trinity._utils.datastructures import (
     SortableTask,
 )
 
-TChainPeer = TypeVar('TChainPeer', bound=BaseChainPeer)
+TChainPeer = TypeVar('TChainPeer', bound=ETHProxyPeer)
 
 
 class WaitingPeers(Generic[TChainPeer]):
@@ -34,10 +35,11 @@ class WaitingPeers(Generic[TChainPeer]):
         self._peer_wrapper = SortableTask.orderable_by_func(self._get_peer_rank)
 
     def _get_peer_rank(self, peer: TChainPeer) -> float:
+
         relevant_throughputs = [
-            exchange.tracker.items_per_second_ema.value
-            for exchange in peer.requests
-            if issubclass(exchange.response_cmd_type, self._response_command_type)
+            items_per_second
+            for response_cmd_type, items_per_second in peer.perf_metrics.items()
+            if issubclass(response_cmd_type, self._response_command_type)
         ]
 
         if len(relevant_throughputs) == 0:
