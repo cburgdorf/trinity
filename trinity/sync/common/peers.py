@@ -13,13 +13,12 @@ from eth_utils import (
 
 from p2p.protocol import Command
 
-# from trinity.protocol.common.peer import BaseChainProxyPeer
-from trinity.protocol.eth.peer import ETHProxyPeer
+from trinity.protocol.common.peer import BaseChainProxyPeer
 from trinity._utils.datastructures import (
     SortableTask,
 )
 
-TChainPeer = TypeVar('TChainPeer', bound=ETHProxyPeer)
+TChainPeer = TypeVar('TChainPeer', bound=BaseChainProxyPeer)
 
 
 class WaitingPeers(Generic[TChainPeer]):

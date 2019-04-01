@@ -259,11 +259,13 @@ class ETHPeerPoolEventServer(PeerPoolEventServer[ETHPeer, BaseChainPeerPool]):
                     ev.timeout,
                 )
             except TimeoutError as e:
-                self.logger.debug("Timed out waiting on %s from %s", GetBlockHeadersRequest, peer)
+                self.logger.debug(
+                    "Timed out waiting on %s from %s", GetBlockHeadersRequest, ev.peer
+                )
                 self.event_bus.broadcast(
                     GetBlockHeadersResponse(tuple(), e), ev.broadcast_config())
             except (CancelledError, OperationCancelled, PeerConnectionLost) as e:
-                self.logger.warning("Error performing action on peer %s. Doing nothing.", peer)
+                self.logger.warning("Error performing action on peer %s. Doing nothing.", ev.peer)
                 self.event_bus.broadcast(
                     GetBlockHeadersResponse(tuple(), e), ev.broadcast_config())
             else:
@@ -278,13 +280,13 @@ class ETHPeerPoolEventServer(PeerPoolEventServer[ETHPeer, BaseChainPeerPool]):
                     ev.timeout,
                 )
             except TimeoutError as e:
-                self.logger.debug("Timed out waiting on %s from %s", GetBlockBodiesRequest, peer)
+                self.logger.debug("Timed out waiting on %s from %s", GetBlockBodiesRequest, ev.peer)
                 self.event_bus.broadcast(GetBlockBodiesResponse(tuple(), e), ev.broadcast_config())
             except (CancelledError, OperationCancelled, PeerConnectionLost) as e:
-                self.logger.warning("Error performing action on peer %s. Doing nothing.", peer)
+                self.logger.warning("Error performing action on peer %s. Doing nothing.", ev.peer)
                 self.event_bus.broadcast(GetBlockBodiesResponse(tuple(), e), ev.broadcast_config())
             else:
-                self.logger.warning("Sending %s block bodies from %s", len(bundles), peer)
+                self.logger.warning("Sending %s block bodies from %s", len(bundles), ev.peer)
                 self.event_bus.broadcast(GetBlockBodiesResponse(bundles), ev.broadcast_config())
 
     async def handle_get_node_data_requests(self) -> None:
@@ -293,10 +295,10 @@ class ETHPeerPoolEventServer(PeerPoolEventServer[ETHPeer, BaseChainPeerPool]):
                 peer = self.get_peer(ev.peer)
                 bundles = await peer.requests.get_node_data(ev.node_hashes, ev.timeout)
             except TimeoutError as e:
-                self.logger.debug("Timed out waiting on %s from %s", GetNodeDataRequest, peer)
+                self.logger.debug("Timed out waiting on %s from %s", GetNodeDataRequest, ev.peer)
                 self.event_bus.broadcast(GetNodeDataResponse(tuple(), e), ev.broadcast_config())
             except (CancelledError, OperationCancelled, PeerConnectionLost) as e:
-                self.logger.warning("Error performing action on peer %s. Doing nothing.", peer)
+                self.logger.warning("Error performing action on peer %s. Doing nothing.", ev.peer)
                 self.event_bus.broadcast(GetNodeDataResponse(tuple(), e), ev.broadcast_config())
             else:
                 self.event_bus.broadcast(GetNodeDataResponse(bundles), ev.broadcast_config())
@@ -307,14 +309,14 @@ class ETHPeerPoolEventServer(PeerPoolEventServer[ETHPeer, BaseChainPeerPool]):
                 peer = self.get_peer(ev.peer)
                 bundles = await peer.requests.get_receipts(ev.headers, ev.timeout)
             except TimeoutError as e:
-                self.logger.debug("Timed out waiting on %s from %s", GetReceiptsRequest, peer)
+                self.logger.debug("Timed out waiting on %s from %s", GetReceiptsRequest, ev.peer)
                 self.event_bus.broadcast(GetReceiptsResponse(tuple(), e), ev.broadcast_config())
             except (CancelledError, OperationCancelled, PeerConnectionLost) as e:
                 self.logger.warning(
-                    "Error performing action on peer %s. Reason %s, Doing nothing.", peer, e)
+                    "Error performing action on peer %s. Reason %s, Doing nothing.", ev.peer, e)
                 self.event_bus.broadcast(GetReceiptsResponse(tuple(), e), ev.broadcast_config())
             else:
-                self.logger.warning("Sending %s receipts from %s", len(bundles), peer)
+                self.logger.warning("Sending %s receipts from %s", len(bundles), ev.peer)
                 self.event_bus.broadcast(GetReceiptsResponse(bundles), ev.broadcast_config())
 
     async def handle_get_highest_td_peer_requests(self) -> None:

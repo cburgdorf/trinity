@@ -11,7 +11,7 @@ from p2p.service import BaseService
 from trinity.chains.base import BaseAsyncChain
 from trinity.db.base import BaseAsyncDB
 from trinity.db.eth1.chain import BaseAsyncChainDB
-from trinity.protocol.eth.peer import ETHPeerPool
+from trinity.protocol.eth.peer import ETHProxyPeerPool
 
 from .chain import FastChainSyncer, RegularChainSyncer
 from .constants import FAST_SYNC_CUTOFF
@@ -23,7 +23,7 @@ async def ensure_state_then_sync_full(logger: logging.Logger,
                                       base_db: BaseAsyncDB,
                                       chaindb: BaseAsyncChainDB,
                                       chain: BaseAsyncChain,
-                                      peer_pool: ETHPeerPool,
+                                      peer_pool: ETHProxyPeerPool,
                                       cancel_token: CancelToken) -> None:
     # Ensure we have the state for our current head.
     if head.state_root != BLANK_ROOT_HASH and head.state_root not in base_db:
@@ -50,7 +50,7 @@ class FullChainSyncer(BaseService):
                  chain: BaseAsyncChain,
                  chaindb: BaseAsyncChainDB,
                  base_db: BaseAsyncDB,
-                 peer_pool: ETHPeerPool,
+                 peer_pool: ETHProxyPeerPool,
                  token: CancelToken = None) -> None:
         super().__init__(token)
         self.chain = chain
@@ -81,7 +81,7 @@ class FastThenFullChainSyncer(BaseService):
                  chain: BaseAsyncChain,
                  chaindb: BaseAsyncChainDB,
                  base_db: BaseAsyncDB,
-                 peer_pool: ETHPeerPool,
+                 peer_pool: ETHProxyPeerPool,
                  token: CancelToken = None) -> None:
         super().__init__(token)
         self.chain = chain
@@ -133,63 +133,63 @@ class FastThenFullChainSyncer(BaseService):
         )
 
 
-def _test() -> None:
-    import argparse
-    import asyncio
-    import signal
-    from eth.chains.ropsten import ROPSTEN_VM_CONFIGURATION
-    from eth.db.backends.level import LevelDB
-    from p2p import ecies
-    from p2p.kademlia import Node
-    from trinity.constants import DEFAULT_PREFERRED_NODES, ROPSTEN_NETWORK_ID
-    from trinity.protocol.common.context import ChainContext
-    from tests.core.integration_test_helpers import (
-        FakeAsyncChainDB, FakeAsyncRopstenChain, connect_to_peers_loop)
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s')
+# def _test() -> None:
+#     import argparse
+#     import asyncio
+#     import signal
+#     from eth.chains.ropsten import ROPSTEN_VM_CONFIGURATION
+#     from eth.db.backends.level import LevelDB
+#     from p2p import ecies
+#     from p2p.kademlia import Node
+#     from trinity.constants import DEFAULT_PREFERRED_NODES, ROPSTEN_NETWORK_ID
+#     from trinity.protocol.common.context import ChainContext
+#     from tests.core.integration_test_helpers import (
+#         FakeAsyncChainDB, FakeAsyncRopstenChain, connect_to_peers_loop)
+#     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s')
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-db', type=str, required=True)
-    parser.add_argument('-enode', type=str, required=False, help="The enode we should connect to")
-    args = parser.parse_args()
+#     parser = argparse.ArgumentParser()
+#     parser.add_argument('-db', type=str, required=True)
+#     parser.add_argument('-enode', type=str, required=False, help="The enode we should connect to")
+#     args = parser.parse_args()
 
-    chaindb = FakeAsyncChainDB(LevelDB(args.db))
-    chain = FakeAsyncRopstenChain(chaindb)
-    network_id = ROPSTEN_NETWORK_ID
-    privkey = ecies.generate_privkey()
+#     chaindb = FakeAsyncChainDB(LevelDB(args.db))
+#     chain = FakeAsyncRopstenChain(chaindb)
+#     network_id = ROPSTEN_NETWORK_ID
+#     privkey = ecies.generate_privkey()
 
-    context = ChainContext(
-        headerdb=chaindb,
-        network_id=network_id,
-        vm_configuration=ROPSTEN_VM_CONFIGURATION
-    )
-    peer_pool = ETHPeerPool(privkey=privkey, context=context)
-    if args.enode:
-        nodes = tuple([Node.from_uri(args.enode)])
-    else:
-        nodes = DEFAULT_PREFERRED_NODES[network_id]
-    asyncio.ensure_future(peer_pool.run())
-    peer_pool.run_task(connect_to_peers_loop(peer_pool, nodes))
+#     context = ChainContext(
+#         headerdb=chaindb,
+#         network_id=network_id,
+#         vm_configuration=ROPSTEN_VM_CONFIGURATION
+#     )
+#     peer_pool = ETHPeerPool(privkey=privkey, context=context)
+#     if args.enode:
+#         nodes = tuple([Node.from_uri(args.enode)])
+#     else:
+#         nodes = DEFAULT_PREFERRED_NODES[network_id]
+#     asyncio.ensure_future(peer_pool.run())
+#     peer_pool.run_task(connect_to_peers_loop(peer_pool, nodes))
 
-    loop = asyncio.get_event_loop()
+#     loop = asyncio.get_event_loop()
 
-    syncer = FastThenFullChainSyncer(chain, chaindb, chaindb.db, peer_pool)
+#     syncer = FastThenFullChainSyncer(chain, chaindb, chaindb.db, peer_pool)
 
-    sigint_received = asyncio.Event()
-    for sig in [signal.SIGINT, signal.SIGTERM]:
-        loop.add_signal_handler(sig, sigint_received.set)
+#     sigint_received = asyncio.Event()
+#     for sig in [signal.SIGINT, signal.SIGTERM]:
+#         loop.add_signal_handler(sig, sigint_received.set)
 
-    async def exit_on_sigint() -> None:
-        await sigint_received.wait()
-        await syncer.cancel()
-        await peer_pool.cancel()
-        loop.stop()
+#     async def exit_on_sigint() -> None:
+#         await sigint_received.wait()
+#         await syncer.cancel()
+#         await peer_pool.cancel()
+#         loop.stop()
 
-    loop.set_debug(True)
-    asyncio.ensure_future(exit_on_sigint())
-    asyncio.ensure_future(syncer.run())
-    loop.run_forever()
-    loop.close()
+#     loop.set_debug(True)
+#     asyncio.ensure_future(exit_on_sigint())
+#     asyncio.ensure_future(syncer.run())
+#     loop.run_forever()
+#     loop.close()
 
 
-if __name__ == "__main__":
-    _test()
+# if __name__ == "__main__":
+#     _test()

@@ -12,13 +12,13 @@ from typing import (
     Awaitable,
     Callable,
     Dict,
+    Generic,
     List,
     NamedTuple,
     FrozenSet,
     Tuple,
     Type,
     TypeVar,
-    cast,
 )
 
 from cancel_token import CancelToken, OperationCancelled
@@ -45,11 +45,9 @@ from eth.rlp.transactions import BaseTransaction
 
 from p2p.p2p_proto import DisconnectReason
 from p2p.exceptions import BaseP2PError, PeerConnectionLost
-from p2p.peer import BasePeer
 from p2p.protocol import Command
 from p2p.service import BaseService
 
-from trinity.endpoint import TrinityEventBusEndpoint
 from trinity.chains.base import BaseAsyncChain
 from trinity.db.eth1.chain import BaseAsyncChainDB
 from trinity.protocol.eth.monitors import ETHChainTipMonitor
@@ -60,7 +58,7 @@ from trinity.protocol.eth.constants import (
 )
 from trinity.protocol.common.peer import BaseChainProxyPeer
 from trinity.protocol.common.peer_pool_event_bus import BaseProxyPeerPool
-from trinity.protocol.eth.peer import ETHPeer, ETHPeerPool, ETHProxyPeer, ETHProxyPeerPool
+from trinity.protocol.eth.peer import ETHProxyPeer, ETHProxyPeerPool
 from trinity.protocol.eth.sync import ETHHeaderChainSyncer
 from trinity.rlp.block_body import BlockBody
 from trinity.sync.common.chain import (
@@ -104,7 +102,7 @@ REQUEST_BUFFER_MULTIPLIER = 16
 TProxyPeer = TypeVar('TProxyPeer', bound=BaseChainProxyPeer)
 
 
-class BaseBodyChainSyncer(BaseService, ABC):
+class BaseBodyChainSyncer(BaseService, Generic[TProxyPeer], ABC):
 
     NO_PEER_RETRY_PAUSE = 5.0
     "If no peers are available for downloading the chain data, retry after this many seconds"
@@ -125,13 +123,11 @@ class BaseBodyChainSyncer(BaseService, ABC):
                  chain: BaseAsyncChain,
                  db: BaseAsyncChainDB,
                  header_syncer: HeaderSyncerAPI,
-                 event_bus: TrinityEventBusEndpoint,
                  proxy_peer_pool: BaseProxyPeerPool[TProxyPeer],
                  token: CancelToken = None) -> None:
         super().__init__(token=token)
         self.chain = chain
         self.db = db
-        self.event_bus = event_bus
         self.proxy_peer_pool = proxy_peer_pool
         self._pending_bodies = {}
 
@@ -457,14 +453,12 @@ class FastChainSyncer(BaseService):
     def __init__(self,
                  chain: BaseAsyncChain,
                  db: BaseAsyncChainDB,
-                 event_bus: TrinityEventBusEndpoint,
                  proxy_peer_pool: ETHProxyPeerPool,
                  token: CancelToken = None) -> None:
         super().__init__(token=token)
         self._header_syncer = ETHHeaderChainSyncer(
             chain,
             db,
-            event_bus,
             proxy_peer_pool,
             self.cancel_token
         )
@@ -472,7 +466,6 @@ class FastChainSyncer(BaseService):
             chain,
             db,
             self._header_syncer,
-            event_bus,
             proxy_peer_pool,
             self.cancel_token,
         )
@@ -558,7 +551,7 @@ class ChainSyncPerformanceTracker:
         return stats
 
 
-class FastChainBodySyncer(BaseBodyChainSyncer):
+class FastChainBodySyncer(BaseBodyChainSyncer[ETHProxyPeer]):
     """
     Sync with the Ethereum network by fetching block headers/bodies and storing them in our DB.
 
@@ -570,10 +563,9 @@ class FastChainBodySyncer(BaseBodyChainSyncer):
                  chain: BaseAsyncChain,
                  db: BaseAsyncChainDB,
                  header_syncer: HeaderSyncerAPI,
-                 event_bus: TrinityEventBusEndpoint,
                  proxy_peer_pool: ETHProxyPeerPool,
                  token: CancelToken = None) -> None:
-        super().__init__(chain, db, header_syncer, event_bus, proxy_peer_pool, token)
+        super().__init__(chain, db, header_syncer, proxy_peer_pool, token)
 
         # queue up any idle peers, in order of how fast they return receipts
         self._receipt_peers: WaitingPeers[ETHProxyPeer] = WaitingPeers(commands.Receipts)
@@ -945,17 +937,16 @@ class RegularChainSyncer(BaseService):
     def __init__(self,
                  chain: BaseAsyncChain,
                  db: BaseAsyncChainDB,
-                 event_bus: TrinityEventBusEndpoint,
                  peer_pool: ETHProxyPeerPool,
                  token: CancelToken = None) -> None:
         super().__init__(token=token)
         self._header_syncer = ETHHeaderChainSyncer(
-            chain, db, event_bus, peer_pool, self.cancel_token)
+            chain, db, peer_pool, self.cancel_token)
         self._body_syncer = RegularChainBodySyncer(
             chain,
             db,
-            peer_pool,
             self._header_syncer,
+            peer_pool,
             SimpleBlockImporter(chain),
             self.cancel_token,
         )
@@ -971,17 +962,18 @@ class BlockImportPrereqs(enum.Enum):
     StoreBlockBodies = enum.auto()
 
 
-class RegularChainBodySyncer(BaseBodyChainSyncer):
+class RegularChainBodySyncer(BaseBodyChainSyncer[ETHProxyPeer]):
     """
     Sync with the Ethereum network by fetching block headers/bodies and importing them.
 
     Here, the run() method will execute the sync loop forever, until our CancelToken is triggered.
     """
+
     def __init__(self,
                  chain: BaseAsyncChain,
                  db: BaseAsyncChainDB,
                  header_syncer: HeaderSyncerAPI,
-                 peer_pool: ETHPeerPool,
+                 peer_pool: ETHProxyPeerPool,
                  block_importer: BaseBlockImporter,
                  token: CancelToken = None) -> None:
         super().__init__(chain, db, header_syncer, peer_pool, token)
@@ -1003,10 +995,8 @@ class RegularChainBodySyncer(BaseBodyChainSyncer):
         self.run_daemon_task(self._import_ready_blocks())
         await super()._run()
 
-    def register_peer(self, peer: BasePeer) -> None:
-        # when a new peer is added to the pool, add it to the idle peer list
-        super().register_peer(peer)
-        self._body_peers.put_nowait(cast(ETHPeer, peer))
+    def register_proxy_peer(self, proxy_peer: ETHProxyPeer) -> None:
+        self._body_peers.put_nowait(proxy_peer)
 
     async def _should_skip_header(self, header: BlockHeader) -> bool:
         """

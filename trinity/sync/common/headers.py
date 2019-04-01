@@ -41,7 +41,6 @@ from p2p.p2p_proto import DisconnectReason
 from p2p.protocol import Command
 from p2p.service import BaseService
 
-from trinity.endpoint import TrinityEventBusEndpoint
 from trinity.chains.base import BaseAsyncChain
 from trinity.db.eth1.header import BaseAsyncHeaderDB
 from trinity.protocol.common.commands import (
@@ -509,7 +508,6 @@ class HeaderMeatSyncer(BaseService, Generic[TChainPeer]):
     def __init__(
             self,
             chain: BaseAsyncChain,
-            event_bus: TrinityEventBusEndpoint,
             proxy_peer_pool: BaseProxyPeerPool[TChainPeer],
             stitcher: HeaderStitcher,
             token: CancelToken) -> None:
@@ -526,7 +524,6 @@ class HeaderMeatSyncer(BaseService, Generic[TChainPeer]):
 
         # queue up idle peers, ordered by speed that they return block bodies
         self._waiting_peers: WaitingPeers[TChainPeer] = WaitingPeers(BaseBlockHeaders)
-        self._event_bus = event_bus
 
     async def schedule_segment(
             self,
@@ -727,17 +724,14 @@ class BaseHeaderChainSyncer(BaseService, HeaderSyncerAPI, Generic[TChainPeer]):
     def __init__(self,
                  chain: BaseAsyncChain,
                  db: BaseAsyncHeaderDB,
-                 event_bus: TrinityEventBusEndpoint,
                  proxy_peer_pool: BaseProxyPeerPool[TChainPeer],
                  token: CancelToken = None) -> None:
         super().__init__(token)
         self._db = db
         self._chain = chain
         self._last_target_header_hash: Hash32 = None
-        self._event_bus = event_bus
         self._proxy_peer_pool = proxy_peer_pool
-        self._tip_monitor = self.tip_monitor_class(
-            event_bus, proxy_peer_pool, token=self.cancel_token)
+        self._tip_monitor = self.tip_monitor_class(proxy_peer_pool, token=self.cancel_token)
         self._skeleton: SkeletonSyncer[TChainPeer] = None
 
         # Track if there is capacity for syncing more headers
@@ -759,7 +753,7 @@ class BaseHeaderChainSyncer(BaseService, HeaderSyncerAPI, Generic[TChainPeer]):
         # When downloading the headers into the gaps left by the syncer, they must be linearized
         # by the stitcher
         self._meat = HeaderMeatSyncer(
-            self._chain, self._event_bus, self._proxy_peer_pool, self._stitcher, self.cancel_token)
+            self._chain, self._proxy_peer_pool, self._stitcher, self.cancel_token)
 
         # Queue has reset, so always start with capacity
         self._buffer_capacity.set()

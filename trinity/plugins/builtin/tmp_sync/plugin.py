@@ -92,7 +92,7 @@ class TmpSyncPlugin(BaseIsolatedPlugin):
             proxy_peer_pool = ETHProxyPeerPool(self.event_bus, TO_NETWORKING_BROADCAST_CONFIG)
             asyncio.ensure_future(proxy_peer_pool.run())
 
-            syncer = FastChainSyncer(chain, chain_db, self.event_bus, proxy_peer_pool)
+            syncer = FastChainSyncer(chain, chain_db, proxy_peer_pool)
         else:
             raise Exception(f"Unsupported Database Mode: {eth1_app_config.database_mode}")
 

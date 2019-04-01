@@ -85,7 +85,7 @@ async def test_fast_syncer_with_isolated_server(request,
 
     proxy_peer_pool = await run_proxy_peer_pool(client_event_bus)
     client = FastChainSyncer(
-        ByzantiumTestChain(chaindb_fresh.db), chaindb_fresh, client_event_bus, proxy_peer_pool)
+        ByzantiumTestChain(chaindb_fresh.db), chaindb_fresh, proxy_peer_pool)
     # FastChainSyncer.run() will return as soon as it's caught up with the peer.
     await asyncio.wait_for(client.run(), timeout=2)
 
@@ -186,7 +186,7 @@ async def test_skeleton_syncer_with(request,
 
     proxy_peer_pool = await run_proxy_peer_pool(client_event_bus)
     client = FastChainSyncer(
-        ByzantiumTestChain(chaindb_fresh.db), chaindb_fresh, client_event_bus, proxy_peer_pool)
+        ByzantiumTestChain(chaindb_fresh.db), chaindb_fresh, proxy_peer_pool)
 
     client_peer.logger.info("%s is serving 1000 blocks", client_peer)
     server_peer.logger.info("%s is syncing up 1000 blocks", server_peer)

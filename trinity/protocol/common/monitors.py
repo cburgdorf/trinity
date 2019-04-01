@@ -17,8 +17,6 @@ from p2p.peer import BasePeer
 from p2p.protocol import Command
 from p2p.service import BaseService
 
-from trinity.endpoint import TrinityEventBusEndpoint
-from trinity.protocol.common.events import PeerPoolMessageEvent
 from trinity.protocol.common.peer import BaseChainProxyPeer
 from trinity.protocol.eth.peer import BaseProxyPeerPool
 
@@ -41,11 +39,9 @@ class BaseChainTipMonitor(BaseService, Generic[TProxyPeer]):
 
     def __init__(
             self,
-            event_bus: TrinityEventBusEndpoint,
             proxy_peer_pool: BaseProxyPeerPool[TProxyPeer],
             token: CancelToken = None) -> None:
         super().__init__(token)
-        self._event_bus = event_bus
         self._proxy_peer_pool = proxy_peer_pool
         # There is one event for each subscriber, each one gets set any time new tip info arrives
         self._subscriber_notices: Set[asyncio.Event] = set()
@@ -86,7 +82,7 @@ class BaseChainTipMonitor(BaseService, Generic[TProxyPeer]):
 
     async def _handle_msg_loop(self) -> None:
         new_tip_types = tuple(self.subscription_msg_types)
-        async for ev in self.wait_iter(self._event_bus.stream(PeerPoolMessageEvent)):
+        async for ev in self.wait_iter(self._proxy_peer_pool.stream_peer_messages()):
             if isinstance(ev.cmd, new_tip_types):
                 self.logger.warning("Potential new tip")
                 self._notify_tip()

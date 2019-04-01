@@ -2,6 +2,7 @@ from abc import abstractmethod
 import operator
 import random
 from typing import (
+    Any,
     Dict,
     List,
     Iterable,
@@ -134,6 +135,9 @@ class BaseChainPeer(BasePeer):
 
 
 class BaseChainProxyPeer(BaseService):
+
+    # FIXME
+    requests: Any
 
     def __init__(self,
                  dto_peer: BaseChainDTOPeer,
