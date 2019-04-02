@@ -1,10 +1,15 @@
 from typing import (
     Generic,
+    NamedTuple,
     Tuple,
     Type,
     TypeVar,
 )
 
+from eth_typing import (
+    BlockNumber,
+    Hash32,
+)
 from lahja import (
     BaseEvent,
     BaseRequestResponseEvent,
@@ -103,6 +108,30 @@ class DisconnectPeerEvent(BaseEvent):
     def __init__(self, peer: IdentifiablePeer, reason: DisconnectReason) -> None:
         self.peer = peer
         self.reason = reason
+
+
+class ChainPeerMetaData(NamedTuple):
+    head_td: int
+    head_hash: Hash32
+    head_number: BlockNumber
+    max_headers_fetch: int
+
+
+class GetPeerMetaDataResponse(BaseEvent):
+
+    def __init__(self,
+                 meta_data: ChainPeerMetaData) -> None:
+        self.meta_data = meta_data
+
+
+class GetPeerMetaDataRequest(BaseRequestResponseEvent[GetPeerMetaDataResponse]):
+
+    def __init__(self, peer: IdentifiablePeer) -> None:
+        self.peer = peer
+
+    @staticmethod
+    def expected_response_type() -> Type[GetPeerMetaDataResponse]:
+        return GetPeerMetaDataResponse
 
 
 class GetHighestTDPeerResponse(BaseEvent):

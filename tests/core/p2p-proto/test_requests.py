@@ -48,6 +48,13 @@ async def test_proxy_peer_requests(request,
 
     assert proxy_peer.perf_metrics[BlockHeaders] == 0
 
+    meta_data = await proxy_peer.get_meta_data()
+
+    assert meta_data.head_td == 105
+    assert meta_data.head_hash == b'_\x97\x80\x92\x8e\xffgvI\x15If?\xf7mT_Fsd\xca\xb4\x8eo\x95\xfc\x1bj\x91x\xb4\xbf'
+    assert meta_data.max_headers_fetch == 192
+    assert meta_data.head_number == None
+
     headers = await proxy_peer.requests.get_block_headers(0, 1, 0, False)
 
     assert len(headers) == 1

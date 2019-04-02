@@ -45,7 +45,9 @@ from trinity.protocol.common.handlers import BaseChainExchangeHandler
 from .boot import DAOCheckBootManager
 from .context import ChainContext
 from .events import (
+    ChainPeerMetaData,
     DisconnectPeerEvent,
+    GetPeerMetaDataRequest,
 )
 
 
@@ -133,7 +135,6 @@ class BaseChainPeer(BasePeer):
             self._collect_performance_metrics(),
         )
 
-
 class BaseChainProxyPeer(BaseService):
 
     # FIXME
@@ -188,6 +189,18 @@ class BaseChainProxyPeer(BaseService):
             DisconnectPeerEvent(self.dto_peer, reason),
             TO_NETWORKING_BROADCAST_CONFIG,
         )
+
+    async def get_meta_data(self) -> ChainPeerMetaData:
+        response = await self.wait(
+            self.event_bus.request(
+                GetPeerMetaDataRequest(self.dto_peer),
+                TO_NETWORKING_BROADCAST_CONFIG
+            ),
+            #FIXME
+            timeout=10.0
+        )
+
+        return response.meta_data
 
 
 class BaseChainPeerFactory(BasePeerFactory):

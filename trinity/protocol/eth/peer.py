@@ -35,10 +35,13 @@ from trinity.endpoint import (
     TrinityEventBusEndpoint,
 )
 from trinity.protocol.common.events import (
+    ChainPeerMetaData,
     GetConnectedPeersRequest,
     GetConnectedPeersResponse,
     GetHighestTDPeerRequest,
     GetHighestTDPeerResponse,
+    GetPeerMetaDataRequest,
+    GetPeerMetaDataResponse,
 )
 from trinity.protocol.common.peer import (
     BaseChainPeer,
@@ -209,6 +212,7 @@ class ETHPeerPoolEventServer(PeerPoolEventServer[ETHPeer, BaseChainPeerPool]):
         self.run_daemon_task(self.handle_get_receipts_requests())
         self.run_daemon_task(self.handle_get_highest_td_peer_requests())
         self.run_daemon_task(self.handle_connected_peers_requests())
+        self.run_daemon_task(self.handle_get_peer_meta_data_requests())
         await super()._run()
 
     async def handle_send_blockheader_events(self) -> None:
@@ -344,6 +348,22 @@ class ETHPeerPoolEventServer(PeerPoolEventServer[ETHPeer, BaseChainPeerPool]):
                 ev.broadcast_config()
             )
 
+
+    async def handle_get_peer_meta_data_requests(self) -> None:
+        async for ev in self.wait_iter(self.event_bus.stream(GetPeerMetaDataRequest)):
+            try:
+                peer = self.get_peer(ev.peer)
+            except (TimeoutError, CancelledError, OperationCancelled, PeerConnectionLost) as e:
+                self.logger.warning("Error performing action on peer %s. Doing nothing.", ev.peer)
+                self.event_bus.broadcast(GetPeerMetaDataResponse(None, e), ev.broadcast_config())
+            else:
+                meta_data = ChainPeerMetaData(
+                    head_td=peer.head_td,
+                    head_hash=peer.head_hash,
+                    head_number=peer.head_number,
+                    max_headers_fetch=peer.max_headers_fetch
+                )
+                self.event_bus.broadcast(GetPeerMetaDataResponse(meta_data), ev.broadcast_config())
 
 class ETHPeerPool(BaseChainPeerPool):
     peer_factory_class = ETHPeerFactory
