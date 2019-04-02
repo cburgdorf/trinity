@@ -81,12 +81,14 @@ class SkeletonSyncer(BaseService, Generic[TChainPeer]):
                  chain: BaseAsyncChain,
                  db: BaseAsyncHeaderDB,
                  peer: TChainPeer,
+                 max_headers_fetch: int,
                  token: CancelToken) -> None:
         super().__init__(token=token)
         self._chain = chain
         self._db = db
         self.peer = peer
-        max_pending_headers = peer.max_headers_fetch * 8
+        self.max_headers_fetch = max_headers_fetch
+        max_pending_headers = max_headers_fetch * 8
         self._fetched_headers = asyncio.Queue(max_pending_headers)
 
     async def next_skeleton_segment(self) -> AsyncIterator[Tuple[BlockHeader, ...]]:
@@ -418,9 +420,9 @@ class SkeletonSyncer(BaseService, Generic[TChainPeer]):
             derived_skip = self._skip_length
 
         if max_headers is None:
-            header_limit = peer.max_headers_fetch
+            header_limit = self.max_headers_fetch
         else:
-            header_limit = min(max_headers, peer.max_headers_fetch)
+            header_limit = min(max_headers, self.max_headers_fetch)
 
         try:
             self.logger.debug("Requsting chain of headers from %s starting at #%d", peer, start_at)
@@ -473,6 +475,9 @@ class SkeletonSyncer(BaseService, Generic[TChainPeer]):
             local_header,
         )
 
+    async def get_sync_peer_head_hash(self):
+        meta_data = await self.wait(self.peer.get_meta_data())
+        return meta_data.head_hash
 
 class HeaderSyncerAPI(ABC):
     @abstractmethod
@@ -631,7 +636,8 @@ class HeaderMeatSyncer(BaseService, Generic[TChainPeer]):
             peer: TChainPeer,
             parent_header: BlockHeader,
             length: int) -> Tuple[BlockHeader, ...]:
-        if length > peer.max_headers_fetch:
+        peer_meta_data = await self.wait(peer.get_meta_data())
+        if length > peer_meta_data.max_headers_fetch:
             raise ValidationError(
                 f"Can't request {length} headers, because peer maximum is {peer.max_headers_fetch}"
             )
@@ -785,7 +791,7 @@ class BaseHeaderChainSyncer(BaseService, HeaderSyncerAPI, Generic[TChainPeer]):
         if not self._is_syncing_skeleton and self._last_target_header_hash is None:
             raise ValidationError("Cannot check the target hash before the first sync has started")
         elif self._is_syncing_skeleton:
-            return self._skeleton.peer.head_hash
+            return self._skeleton.get_sync_peer_head_hash()
         else:
             return self._last_target_header_hash
 
@@ -822,10 +828,13 @@ class BaseHeaderChainSyncer(BaseService, HeaderSyncerAPI, Generic[TChainPeer]):
         if self._is_syncing_skeleton:
             raise ValidationError("Cannot sync skeleton headers from two peers at the same time")
 
+        peer_meta_data = await self.wait(peer.get_meta_data())
+
         self._skeleton = SkeletonSyncer(
             self._chain,
             self._db,
             peer,
+            peer_meta_data.max_headers_fetch,
             self.cancel_token,
         )
         self.run_child_service(self._skeleton)
@@ -839,7 +848,7 @@ class BaseHeaderChainSyncer(BaseService, HeaderSyncerAPI, Generic[TChainPeer]):
                 self._skeleton.cancel_nowait()
         finally:
             self.logger.info("Skeleton sync with %s ended", peer)
-            self._last_target_header_hash = peer.head_hash
+            self._last_target_header_hash = peer_meta_data.head_hash
             self._skeleton = None
 
     @property
@@ -904,13 +913,14 @@ class BaseHeaderChainSyncer(BaseService, HeaderSyncerAPI, Generic[TChainPeer]):
     async def _validate_peer_is_ahead(self, peer: TChainPeer) -> None:
         head = await self.wait(self._db.coro_get_canonical_head())
         head_td = await self.wait(self._db.coro_get_score(head.hash))
-        if peer.head_td <= head_td:
+        peet_meta_data = await self.wait(peer.get_meta_data())
+        if peet_meta_data.head_td <= head_td:
             self.logger.info(
                 "Head TD (%d) announced by %s not higher than ours (%d), not syncing",
-                peer.head_td, peer, head_td)
+                peet_meta_data.head_td, peer, head_td)
             raise _PeerBehind(f"{peer} is behind us, not a valid target for sync")
         else:
             self.logger.debug(
                 "%s announced Head TD %d, which is higher than ours (%d), starting sync",
-                peer, peer.head_td, head_td)
+                peer, peet_meta_data.head_td, head_td)
             pass

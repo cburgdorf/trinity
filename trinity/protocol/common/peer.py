@@ -152,21 +152,21 @@ class BaseChainProxyPeer(BaseService):
     # tries to read again them again. I think the proper fix may be to just group
     # all of these behind one async API that fetches this info. It just convenient
     # to try to mimic the API for now.
-    @property
-    def head_td(self) -> int:
-        return self.dto_peer.head_td
+    # @property
+    # def head_td(self) -> int:
+    #     return self.dto_peer.head_td
 
-    @property
-    def head_hash(self) -> Hash32:
-        return self.dto_peer.head_hash
+    # @property
+    # def head_hash(self) -> Hash32:
+    #     return self.dto_peer.head_hash
 
-    @property
-    def header_number(self) -> BlockNumber:
-        return self.dto_peer.head_number
+    # @property
+    # def header_number(self) -> BlockNumber:
+    #     return self.dto_peer.head_number
 
-    @property
-    def max_headers_fetch(self) -> int:
-        return self.dto_peer.max_headers_fetch
+    # @property
+    # def max_headers_fetch(self) -> int:
+    #     return self.dto_peer.max_headers_fetch
 
     def __str__(self) -> str:
         return f"{self.__class__.__name__} {self.dto_peer.uri}"
@@ -190,6 +190,7 @@ class BaseChainProxyPeer(BaseService):
             TO_NETWORKING_BROADCAST_CONFIG,
         )
 
+    # TODO: Maybe use a TTL cache for this API
     async def get_meta_data(self) -> ChainPeerMetaData:
         response = await self.wait(
             self.event_bus.request(
