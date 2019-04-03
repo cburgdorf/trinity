@@ -12,7 +12,7 @@ from p2p.peer import (
     BasePeer,
     BasePeerContext,
     BasePeerFactory,
-    IdentifiablePeer,
+    DataTransferPeer,
 )
 from p2p.peer_pool import (
     BasePeerPool,
@@ -45,7 +45,7 @@ class ParagonProxyPeer:
 
     @classmethod
     def from_dto_peer(cls,
-                      dto_peer: IdentifiablePeer,
+                      dto_peer: DataTransferPeer,
                       event_bus: Endpoint,
                       broadcast_config: BroadcastConfig) -> 'ParagonProxyPeer':
             return cls(ProxyParagonProtocol(dto_peer, event_bus, broadcast_config))

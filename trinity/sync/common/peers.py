@@ -37,7 +37,7 @@ class WaitingPeers(Generic[TChainPeer]):
 
         relevant_throughputs = [
             items_per_second
-            for response_cmd_type, items_per_second in peer.perf_metrics.items()
+            for response_cmd_type, items_per_second in peer.cached_perf_metrics.items()
             if issubclass(response_cmd_type, self._response_command_type)
         ]
 

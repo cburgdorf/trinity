@@ -46,14 +46,23 @@ async def test_proxy_peer_requests(request,
 
     proxy_peer = await client_proxy_peer_pool.create_or_update_proxy_peer(client_peer.to_dto())
 
-    assert proxy_peer.perf_metrics[BlockHeaders] == 0
+    assert proxy_peer.cached_perf_metrics[BlockHeaders] == 0
+
+    perf_metrics = await proxy_peer.get_perf_metrics()
+
+    assert perf_metrics[BlockHeaders] == 0
+
+    assert proxy_peer.cached_meta_data.head_td == 105
+    assert proxy_peer.cached_meta_data.head_hash == b'_\x97\x80\x92\x8e\xffgvI\x15If?\xf7mT_Fsd\xca\xb4\x8eo\x95\xfc\x1bj\x91x\xb4\xbf'  # noqa: E501
+    assert proxy_peer.cached_meta_data.max_headers_fetch == 192
+    assert proxy_peer.cached_meta_data.head_number is None
 
     meta_data = await proxy_peer.get_meta_data()
 
     assert meta_data.head_td == 105
-    assert meta_data.head_hash == b'_\x97\x80\x92\x8e\xffgvI\x15If?\xf7mT_Fsd\xca\xb4\x8eo\x95\xfc\x1bj\x91x\xb4\xbf'
+    assert meta_data.head_hash == b'_\x97\x80\x92\x8e\xffgvI\x15If?\xf7mT_Fsd\xca\xb4\x8eo\x95\xfc\x1bj\x91x\xb4\xbf'  # noqa: E501
     assert meta_data.max_headers_fetch == 192
-    assert meta_data.head_number == None
+    assert meta_data.head_number is None
 
     headers = await proxy_peer.requests.get_block_headers(0, 1, 0, False)
 

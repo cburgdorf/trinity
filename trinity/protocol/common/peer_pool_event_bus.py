@@ -24,7 +24,7 @@ from p2p.kademlia import (
 )
 from p2p.peer import (
     BasePeer,
-    IdentifiablePeer,
+    DataTransferPeer,
     PeerSubscriber,
 )
 from p2p.peer_pool import (
@@ -107,7 +107,7 @@ class PeerPoolEventServer(BaseService, Generic[TPeer, TPeerPool]):
 
         await self.cancel_token.wait()
 
-    def get_peer(self, dto_peer: IdentifiablePeer) -> TPeer:
+    def get_peer(self, dto_peer: DataTransferPeer) -> TPeer:
 
         try:
             peer = self.peer_pool.connected_nodes[dto_peer.uri]
@@ -239,15 +239,15 @@ class BaseProxyPeerPool(BaseService, Generic[TProxyPeer]):
 
     @abstractmethod
     def to_proxy_peer(self,
-                      peer: IdentifiablePeer,
+                      peer: DataTransferPeer,
                       event_bus: TrinityEventBusEndpoint,
                       broadcast_config: BroadcastConfig) -> TProxyPeer:
         pass
 
-    async def create_or_update_proxy_peer(self, dto_peer: IdentifiablePeer) -> TProxyPeer:
+    async def create_or_update_proxy_peer(self, dto_peer: DataTransferPeer) -> TProxyPeer:
         if dto_peer.uri in self.connected_peers:
-            # TODO: Make this more explicit
-            self.connected_peers[dto_peer.uri].dto_peer = dto_peer  # type: ignore
+            for key, val in dto_peer.cache.items():
+                self.connected_peers[dto_peer.uri].update_cache_item(key, val)
         else:
             proxy_peer = self.to_proxy_peer(
                 dto_peer,

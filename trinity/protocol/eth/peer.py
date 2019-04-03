@@ -23,7 +23,7 @@ from p2p.exceptions import (
     WrongGenesisFailure,
 )
 from p2p.peer import (
-    IdentifiablePeer,
+    DataTransferPeer,
 )
 from p2p.protocol import (
     Command,
@@ -42,10 +42,11 @@ from trinity.protocol.common.events import (
     GetHighestTDPeerResponse,
     GetPeerMetaDataRequest,
     GetPeerMetaDataResponse,
+    GetPeerPerfMetricsRequest,
+    GetPeerPerfMetricsResponse,
 )
 from trinity.protocol.common.peer import (
     BaseChainPeer,
-    BaseChainDTOPeer,
     BaseChainPeerFactory,
     BaseChainPeerPool,
     BaseChainProxyPeer,
@@ -168,7 +169,7 @@ class ETHProxyPeer(BaseChainProxyPeer):
     """
 
     def __init__(self,
-                 dto_peer: BaseChainDTOPeer,
+                 dto_peer: DataTransferPeer,
                  event_bus: TrinityEventBusEndpoint,
                  sub_proto: ProxyETHProtocol,
                  requests: ProxyETHExchangeHandler):
@@ -180,7 +181,7 @@ class ETHProxyPeer(BaseChainProxyPeer):
 
     @classmethod
     def from_dto_peer(cls,
-                      dto_peer: BaseChainDTOPeer,
+                      dto_peer: DataTransferPeer,
                       event_bus: TrinityEventBusEndpoint,
                       broadcast_config: BroadcastConfig) -> 'ETHProxyPeer':
         return cls(
@@ -213,6 +214,7 @@ class ETHPeerPoolEventServer(PeerPoolEventServer[ETHPeer, BaseChainPeerPool]):
         self.run_daemon_task(self.handle_get_highest_td_peer_requests())
         self.run_daemon_task(self.handle_connected_peers_requests())
         self.run_daemon_task(self.handle_get_peer_meta_data_requests())
+        self.run_daemon_task(self.handle_get_peer_perf_metrics_requests())
         await super()._run()
 
     async def handle_send_blockheader_events(self) -> None:
@@ -348,7 +350,6 @@ class ETHPeerPoolEventServer(PeerPoolEventServer[ETHPeer, BaseChainPeerPool]):
                 ev.broadcast_config()
             )
 
-
     async def handle_get_peer_meta_data_requests(self) -> None:
         async for ev in self.wait_iter(self.event_bus.stream(GetPeerMetaDataRequest)):
             try:
@@ -365,6 +366,20 @@ class ETHPeerPoolEventServer(PeerPoolEventServer[ETHPeer, BaseChainPeerPool]):
                 )
                 self.event_bus.broadcast(GetPeerMetaDataResponse(meta_data), ev.broadcast_config())
 
+    async def handle_get_peer_perf_metrics_requests(self) -> None:
+        async for ev in self.wait_iter(self.event_bus.stream(GetPeerPerfMetricsRequest)):
+            try:
+                peer = self.get_peer(ev.peer)
+            except (TimeoutError, CancelledError, OperationCancelled, PeerConnectionLost) as e:
+                self.logger.warning("Error performing action on peer %s. Doing nothing.", ev.peer)
+                self.event_bus.broadcast(GetPeerPerfMetricsResponse(None, e), ev.broadcast_config())
+            else:
+                self.event_bus.broadcast(
+                    GetPeerPerfMetricsResponse(peer.collect_performance_metrics()),
+                    ev.broadcast_config()
+                )
+
+
 class ETHPeerPool(BaseChainPeerPool):
     peer_factory_class = ETHPeerFactory
 
@@ -372,11 +387,11 @@ class ETHPeerPool(BaseChainPeerPool):
 class ETHProxyPeerPool(BaseProxyPeerPool[ETHProxyPeer]):
 
     def to_proxy_peer(self,
-                      peer: IdentifiablePeer,
+                      peer: DataTransferPeer,
                       event_bus: TrinityEventBusEndpoint,
                       broadcast_config: BroadcastConfig) -> ETHProxyPeer:
         return ETHProxyPeer.from_dto_peer(
-            cast(BaseChainDTOPeer, peer),
+            peer,
             self.event_bus,
             self.broadcast_config
         )

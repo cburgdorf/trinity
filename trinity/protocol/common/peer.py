@@ -1,4 +1,5 @@
 from abc import abstractmethod
+import enum
 import operator
 import random
 from typing import (
@@ -28,7 +29,7 @@ from p2p.exceptions import NoConnectedPeers
 from p2p.peer import (
     BasePeer,
     BasePeerFactory,
-    IdentifiablePeer,
+    DataTransferPeer,
 )
 from p2p.peer_pool import (
     BasePeerPool,
@@ -48,6 +49,7 @@ from .events import (
     ChainPeerMetaData,
     DisconnectPeerEvent,
     GetPeerMetaDataRequest,
+    GetPeerPerfMetricsRequest,
 )
 
 
@@ -56,17 +58,6 @@ class ChainInfo(NamedTuple):
     block_hash: Hash32
     total_difficulty: int
     genesis_hash: Hash32
-
-
-class BaseChainDTOPeer(NamedTuple):
-    # TODO: Calling code might worker under the assumption these values are live
-    # which they aren't for the DTO. Potential footgun?
-    uri: str
-    head_td: int
-    head_hash: Hash32
-    head_number: BlockNumber
-    max_headers_fetch: int
-    perf_metrics: Dict[Type[Command], float]
 
 
 class BaseChainPeer(BasePeer):
@@ -117,23 +108,30 @@ class BaseChainPeer(BasePeer):
             genesis_hash=genesis.hash,
         )
 
-    # We take a snapshot of these metrics whenever a peer is send across as a DTO peer.
-    # This means there's no guarantee about the freshness of these values on the DTO side.
-    # An alternative would be to have each process do its own performance tracking?
     @to_dict
-    def _collect_performance_metrics(self) -> Iterable[Tuple[Type[Command], float]]:
+    def collect_performance_metrics(self) -> Iterable[Tuple[Type[Command], float]]:
         for exchange in self.requests:
             yield exchange.response_cmd_type, exchange.tracker.items_per_second_ema.value
 
-    def to_dto(self) -> IdentifiablePeer:
-        return BaseChainDTOPeer(
+    def to_dto(self) -> DataTransferPeer:
+        return DataTransferPeer(
             self.remote.uri(),
-            self.head_td,
-            self.head_hash,
-            self.head_number,
-            self.max_headers_fetch,
-            self._collect_performance_metrics(),
+            {
+                ProxyPeerCacheKey.META_DATA: ChainPeerMetaData(
+                    head_td=self.head_td,
+                    head_hash=self.head_hash,
+                    head_number=self.head_number,
+                    max_headers_fetch=self.max_headers_fetch
+                ),
+                ProxyPeerCacheKey.PERF_METRICS: self.collect_performance_metrics()
+            }
         )
+
+
+class ProxyPeerCacheKey(enum.Enum):
+    META_DATA = enum.auto()
+    PERF_METRICS = enum.auto()
+
 
 class BaseChainProxyPeer(BaseService):
 
@@ -141,32 +139,20 @@ class BaseChainProxyPeer(BaseService):
     requests: Any
 
     def __init__(self,
-                 dto_peer: BaseChainDTOPeer,
+                 dto_peer: DataTransferPeer,
                  event_bus: TrinityEventBusEndpoint,
                  token: CancelToken = None):
         super().__init__(token)
         self.event_bus = event_bus
         self.dto_peer = dto_peer
+        self._cache: Dict[Any, Any] = {}
+        self.update_cache_item(
+            ProxyPeerCacheKey.META_DATA, dto_peer.cache[ProxyPeerCacheKey.META_DATA])
+        self.update_cache_item(
+            ProxyPeerCacheKey.PERF_METRICS, dto_peer.cache[ProxyPeerCacheKey.PERF_METRICS])
 
-    # TODO: Wondering if we should only allow one-time read and throw if code
-    # tries to read again them again. I think the proper fix may be to just group
-    # all of these behind one async API that fetches this info. It just convenient
-    # to try to mimic the API for now.
-    # @property
-    # def head_td(self) -> int:
-    #     return self.dto_peer.head_td
-
-    # @property
-    # def head_hash(self) -> Hash32:
-    #     return self.dto_peer.head_hash
-
-    # @property
-    # def header_number(self) -> BlockNumber:
-    #     return self.dto_peer.head_number
-
-    # @property
-    # def max_headers_fetch(self) -> int:
-    #     return self.dto_peer.max_headers_fetch
+    def update_cache_item(self, key: ProxyPeerCacheKey, val: Any) -> None:
+        self._cache[key] = val
 
     def __str__(self) -> str:
         return f"{self.__class__.__name__} {self.dto_peer.uri}"
@@ -175,33 +161,60 @@ class BaseChainProxyPeer(BaseService):
     def uri(self) -> str:
         return self.dto_peer.uri
 
-    @property
-    def perf_metrics(self) -> Dict[Type[Command], float]:
-        return self.dto_peer.perf_metrics
-
     async def _run(self) -> None:
         self.logger.info("Starting Proxy Peer %s", self)
         await self.cancellation()
 
     async def disconnect(self, reason: DisconnectReason) -> None:
-        self._is_operational = False
         self.event_bus.broadcast(
             DisconnectPeerEvent(self.dto_peer, reason),
             TO_NETWORKING_BROADCAST_CONFIG,
         )
+        self.cancel_nowait()
 
-    # TODO: Maybe use a TTL cache for this API
+    @property
+    def cached_perf_metrics(self) -> Dict[Type[Command], float]:
+        """
+        Return the latest available performance metrics from cache.
+        """
+        return self._cache[ProxyPeerCacheKey.PERF_METRICS]
+
+    @property
+    def cached_meta_data(self) -> ChainPeerMetaData:
+        """
+        Return the latest available meta data from cache
+        """
+        return self._cache[ProxyPeerCacheKey.META_DATA]
+
     async def get_meta_data(self) -> ChainPeerMetaData:
         response = await self.wait(
             self.event_bus.request(
                 GetPeerMetaDataRequest(self.dto_peer),
                 TO_NETWORKING_BROADCAST_CONFIG
             ),
-            #FIXME
+            # FIXME
             timeout=10.0
         )
 
+        # TODO: Exception handling
+        self.update_cache_item(ProxyPeerCacheKey.META_DATA, response.meta_data)
+
         return response.meta_data
+
+    async def get_perf_metrics(self) -> Dict[Type[Command], float]:
+        response = await self.wait(
+            self.event_bus.request(
+                GetPeerPerfMetricsRequest(self.dto_peer),
+                TO_NETWORKING_BROADCAST_CONFIG
+            ),
+            # FIXME
+            timeout=10.0
+        )
+
+        # TODO: Exception handling
+        self.update_cache_item(ProxyPeerCacheKey.PERF_METRICS, response.metrics)
+
+        return response.metrics
 
 
 class BaseChainPeerFactory(BasePeerFactory):

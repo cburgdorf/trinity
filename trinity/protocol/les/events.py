@@ -8,7 +8,7 @@ from lahja import (
     BaseEvent,
 )
 from p2p.peer import (
-    IdentifiablePeer,
+    DataTransferPeer,
 )
 
 if TYPE_CHECKING:
@@ -27,7 +27,7 @@ class SendBlockHeadersEvent(BaseEvent):
     in the peer pool.
     """
     def __init__(self,
-                 peer: IdentifiablePeer,
+                 peer: DataTransferPeer,
                  headers: Tuple[BlockHeader, ...],
                  buffer_value: int,
                  request_id: int=None) -> None:

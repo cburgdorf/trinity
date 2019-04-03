@@ -17,7 +17,7 @@ from lahja import (
     BaseRequestResponseEvent,
 )
 from p2p.peer import (
-    IdentifiablePeer,
+    DataTransferPeer,
 )
 
 from trinity.protocol.common.events import (
@@ -43,7 +43,7 @@ class SendBlockHeadersEvent(BaseEvent):
     An event to carry a *send block header* action from the proxy peer to the actual peer
     in the peer pool.
     """
-    def __init__(self, peer: IdentifiablePeer, headers: Tuple[BlockHeader, ...]) -> None:
+    def __init__(self, peer: DataTransferPeer, headers: Tuple[BlockHeader, ...]) -> None:
         self.peer = peer
         self.headers = headers
 
@@ -53,7 +53,7 @@ class SendBlockBodiesEvent(BaseEvent):
     An event to carry a *send block bodies* action from the proxy peer to the actual peer
     in the peer pool.
     """
-    def __init__(self, peer: IdentifiablePeer, blocks: List[BaseBlock]) -> None:
+    def __init__(self, peer: DataTransferPeer, blocks: List[BaseBlock]) -> None:
         self.peer = peer
         self.blocks = blocks
 
@@ -63,7 +63,7 @@ class SendNodeDataEvent(BaseEvent):
     An event to carry a *send node data* action from the proxy peer to the actual peer
     in the peer pool.
     """
-    def __init__(self, peer: IdentifiablePeer, nodes: Tuple[bytes, ...]) -> None:
+    def __init__(self, peer: DataTransferPeer, nodes: Tuple[bytes, ...]) -> None:
         self.peer = peer
         self.nodes = nodes
 
@@ -73,7 +73,7 @@ class SendReceiptsEvent(BaseEvent):
     An event to carry a *send receipts* action from the proxy peer to the actual peer
     in the peer pool.
     """
-    def __init__(self, peer: IdentifiablePeer, receipts: List[List[Receipt]]) -> None:
+    def __init__(self, peer: DataTransferPeer, receipts: List[List[Receipt]]) -> None:
         self.peer = peer
         self.receipts = receipts
 
@@ -92,7 +92,7 @@ class GetBlockHeadersResponse(BaseEvent):
 class GetBlockHeadersRequest(BaseRequestResponseEvent[GetBlockHeadersResponse]):
 
     def __init__(self,
-                 peer: IdentifiablePeer,
+                 peer: DataTransferPeer,
                  block_number_or_hash: BlockIdentifier,
                  max_headers: int,
                  skip: int,
@@ -122,7 +122,7 @@ class GetBlockBodiesResponse(BaseEvent):
 class GetBlockBodiesRequest(BaseRequestResponseEvent[GetBlockBodiesResponse]):
 
     def __init__(self,
-                 peer: IdentifiablePeer,
+                 peer: DataTransferPeer,
                  headers: Tuple[BlockHeader, ...],
                  timeout: float) -> None:
         self.peer = peer
@@ -146,7 +146,7 @@ class GetNodeDataResponse(BaseEvent):
 class GetNodeDataRequest(BaseRequestResponseEvent[GetNodeDataResponse]):
 
     def __init__(self,
-                 peer: IdentifiablePeer,
+                 peer: DataTransferPeer,
                  node_hashes: Tuple[Hash32, ...],
                  timeout: float) -> None:
         self.peer = peer
@@ -170,7 +170,7 @@ class GetReceiptsResponse(BaseEvent):
 class GetReceiptsRequest(BaseRequestResponseEvent[GetReceiptsResponse]):
 
     def __init__(self,
-                 peer: IdentifiablePeer,
+                 peer: DataTransferPeer,
                  headers: Tuple[BlockHeader, ...],
                  timeout: float) -> None:
         self.peer = peer

@@ -21,7 +21,7 @@ from lahja import (
     Endpoint,
 )
 from p2p.peer import (
-    IdentifiablePeer,
+    DataTransferPeer,
 )
 from p2p.protocol import (
     Protocol,
@@ -271,7 +271,7 @@ class ProxyLESProtocol:
     action performed on this class is delegated to the process that runs the peer pool.
     """
     def __init__(self,
-                 dto_peer: IdentifiablePeer,
+                 dto_peer: DataTransferPeer,
                  event_bus: Endpoint,
                  broadcast_config: BroadcastConfig):
         self._dto_peer = dto_peer

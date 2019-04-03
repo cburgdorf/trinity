@@ -1,4 +1,5 @@
 from typing import (
+    Dict,
     Generic,
     NamedTuple,
     Tuple,
@@ -16,7 +17,7 @@ from lahja import (
 )
 
 from p2p.peer import (
-    IdentifiablePeer,
+    DataTransferPeer,
 )
 from p2p.p2p_proto import (
     DisconnectReason,
@@ -69,14 +70,14 @@ class BasePeerPoolMessageEvent(BaseEvent, Generic[TPeer]):
         self.msg = msg
 
 
-# It appears BasePeerPoolMessageEvent[IdentifiablePeer] can't be pickled
+# It appears BasePeerPoolMessageEvent[DataTransferPeer] can't be pickled
 # so we have to use a non-generic version here.
 class PeerPoolMessageEvent(BaseEvent):
     """
     Event broadcasted when a peer sends a command.
     """
 
-    def __init__(self, peer: IdentifiablePeer, cmd: Command, msg: PayloadType) -> None:
+    def __init__(self, peer: DataTransferPeer, cmd: Command, msg: PayloadType) -> None:
         self.peer = peer
         self.cmd = cmd
         self.msg = msg
@@ -87,7 +88,7 @@ class PeerJoinedEvent(BaseEvent):
     Event broadcasted when a new peer joined the pool.
     """
 
-    def __init__(self, peer: IdentifiablePeer) -> None:
+    def __init__(self, peer: DataTransferPeer) -> None:
         self.peer = peer
 
 
@@ -96,7 +97,7 @@ class PeerLeftEvent(BaseEvent):
     Event broadcasted when a peer left the pool.
     """
 
-    def __init__(self, peer: IdentifiablePeer) -> None:
+    def __init__(self, peer: DataTransferPeer) -> None:
         self.peer = peer
 
 
@@ -105,7 +106,7 @@ class DisconnectPeerEvent(BaseEvent):
     Event broadcasted when we want to disconnect from a peer
     """
 
-    def __init__(self, peer: IdentifiablePeer, reason: DisconnectReason) -> None:
+    def __init__(self, peer: DataTransferPeer, reason: DisconnectReason) -> None:
         self.peer = peer
         self.reason = reason
 
@@ -120,13 +121,15 @@ class ChainPeerMetaData(NamedTuple):
 class GetPeerMetaDataResponse(BaseEvent):
 
     def __init__(self,
-                 meta_data: ChainPeerMetaData) -> None:
+                 meta_data: ChainPeerMetaData,
+                 exception: Exception = None) -> None:
         self.meta_data = meta_data
+        self.exception = exception
 
 
 class GetPeerMetaDataRequest(BaseRequestResponseEvent[GetPeerMetaDataResponse]):
 
-    def __init__(self, peer: IdentifiablePeer) -> None:
+    def __init__(self, peer: DataTransferPeer) -> None:
         self.peer = peer
 
     @staticmethod
@@ -134,10 +137,29 @@ class GetPeerMetaDataRequest(BaseRequestResponseEvent[GetPeerMetaDataResponse]):
         return GetPeerMetaDataResponse
 
 
+class GetPeerPerfMetricsResponse(BaseEvent):
+
+    def __init__(self,
+                 metrics: Dict[Type[Command], float],
+                 exception: Exception = None) -> None:
+        self.metrics = metrics
+        self.exception = exception
+
+
+class GetPeerPerfMetricsRequest(BaseRequestResponseEvent[GetPeerPerfMetricsResponse]):
+
+    def __init__(self, peer: DataTransferPeer) -> None:
+        self.peer = peer
+
+    @staticmethod
+    def expected_response_type() -> Type[GetPeerPerfMetricsResponse]:
+        return GetPeerPerfMetricsResponse
+
+
 class GetHighestTDPeerResponse(BaseEvent):
 
     def __init__(self,
-                 dto_peer: IdentifiablePeer) -> None:
+                 dto_peer: DataTransferPeer) -> None:
         self.dto_peer = dto_peer
 
 
@@ -155,7 +177,7 @@ class GetHighestTDPeerRequest(BaseRequestResponseEvent[GetHighestTDPeerResponse]
 class GetConnectedPeersResponse(BaseEvent):
 
     def __init__(self,
-                 dto_peers: Tuple[IdentifiablePeer, ...]) -> None:
+                 dto_peers: Tuple[DataTransferPeer, ...]) -> None:
         self.dto_peers = dto_peers
 
 

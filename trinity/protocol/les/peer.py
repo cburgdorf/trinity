@@ -25,7 +25,7 @@ from p2p.exceptions import (
     PeerConnectionLost,
 )
 from p2p.peer import (
-    IdentifiablePeer,
+    DataTransferPeer,
 )
 from p2p.p2p_proto import DisconnectReason
 from p2p.protocol import (
@@ -37,7 +37,6 @@ from trinity.endpoint import (
     TrinityEventBusEndpoint,
 )
 from trinity.protocol.common.peer import (
-    BaseChainDTOPeer,
     BaseChainPeer,
     BaseChainPeerFactory,
     BaseChainPeerPool,
@@ -163,7 +162,7 @@ class LESProxyPeer(BaseChainProxyPeer):
 
     @classmethod
     def from_dto_peer(cls,
-                      dto_peer: BaseChainDTOPeer,
+                      dto_peer: DataTransferPeer,
                       event_bus: Endpoint,
                       broadcast_config: BroadcastConfig) -> 'LESProxyPeer':
         return cls(ProxyLESProtocol(dto_peer, event_bus, broadcast_config))
@@ -200,11 +199,11 @@ class LESPeerPool(BaseChainPeerPool):
 class LESProxyPeerPool(BaseProxyPeerPool[LESProxyPeer]):
 
     def to_proxy_peer(self,
-                      peer: IdentifiablePeer,
+                      peer: DataTransferPeer,
                       event_bus: TrinityEventBusEndpoint,
                       broadcast_config: BroadcastConfig) -> LESProxyPeer:
         return LESProxyPeer.from_dto_peer(
-            cast(BaseChainDTOPeer, peer),
+            cast(DataTransferPeer, peer),
             self.event_bus,
             self.broadcast_config
         )
