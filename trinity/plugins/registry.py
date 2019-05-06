@@ -26,6 +26,10 @@ from trinity.plugins.builtin.network_db.plugin import (
 from trinity.plugins.builtin.peer_discovery.plugin import (
     PeerDiscoveryPlugin,
 )
+from trinity.plugins.builtin.performance_tracker.plugin import (
+    TrackerRunnerPlugin,
+    PerformanceTrackerPlugin,
+)
 from trinity.plugins.builtin.syncer.plugin import (
     SyncerPlugin,
 )
@@ -54,7 +58,9 @@ ETH1_NODE_PLUGINS: Tuple[Type[BasePlugin], ...] = (
     DbShellPlugin,
     EthstatsPlugin,
     LightPeerChainBridgePlugin,
+    PerformanceTrackerPlugin,
     SyncerPlugin,
+    TrackerRunnerPlugin,
     TxPlugin,
 )
 
