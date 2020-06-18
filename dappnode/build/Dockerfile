@@ -8,7 +8,7 @@ COPY . /usr/src/app
 RUN apt-get update
 RUN apt-get -y install libsnappy-dev gcc g++ cmake
 
-ARG GITREF=674c645d77aaf5500d69016ae6b148e3046a1799
+ARG GITREF=9c696e5c545fec670de49866e046a4fd29f3b338
 
 RUN git clone https://github.com/cburgdorf/trinity.git
 RUN cd trinity && git checkout $GITREF && pip install -e .[dev] --no-cache-dir
